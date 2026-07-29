@@ -642,30 +642,72 @@ function lerLiteral(s, i) {
   }
   return [out.join(''), i];
 }
-function decodificar(bruto, cmap, doisBytes) {
-  var out = '', i;
+/* larguras dos glifos: /W [ c [w1 w2 ...]  cIni cFim w  ... ] do CIDFont.
+   Sem elas não dá para saber se dois pedaços de texto são palavras
+   separadas ou a mesma palavra escrita em duas operações. */
+function lerLarguras(dict) {
+  var m = /\/W\s*\[/.exec(dict);
+  if (!m) return null;
+  var i = dict.indexOf('[', m.index), prof = 0, fim = i, n = dict.length;
+  for (; fim < n; fim++) {
+    if (dict.charAt(fim) === '[') prof++;
+    else if (dict.charAt(fim) === ']') { prof--; if (!prof) break; }
+  }
+  var corpo = dict.slice(i + 1, fim), larg = {}, pos = 0;
+  var tok = /\[|\]|-?\d+(?:\.\d+)?/g, t, pend = [];
+  tok.lastIndex = 0;
+  while ((t = tok.exec(corpo))) {
+    if (t[0] === '[') {
+      var cIni = pend.length ? pend[pend.length - 1] : 0, k = 0, t2;
+      while ((t2 = tok.exec(corpo)) && t2[0] !== ']') larg[cIni + (k++)] = parseFloat(t2[0]);
+      pend = [];
+    } else if (t[0] === ']') { /* nada */ }
+    else {
+      pend.push(parseFloat(t[0]));
+      if (pend.length === 3) {
+        for (var c = pend[0]; c <= pend[1] && c - pend[0] < 65536; c++) larg[c] = pend[2];
+        pend = [];
+      }
+    }
+  }
+  return larg;
+}
+
+/* devolve o texto e o avanço em milésimos de em */
+function decodificar(bruto, fonte) {
+  var out = '', larg = 0, i;
+  var cmap = fonte && fonte.cmap, doisBytes = fonte ? fonte.doisBytes : false;
+  var tabela = fonte && fonte.larguras, dw = (fonte && fonte.dw != null) ? fonte.dw : (doisBytes ? 1000 : 500);
   if (doisBytes) {
     for (i = 0; i + 1 < bruto.length; i += 2) {
       var cod = (bruto.charCodeAt(i) << 8) | bruto.charCodeAt(i + 1);
       out += (cmap && cmap[cod] != null) ? cmap[cod] : '';
+      larg += (tabela && tabela[cod] != null) ? tabela[cod] : dw;
     }
   } else {
     for (i = 0; i < bruto.length; i++) {
       var c = bruto.charCodeAt(i);
       out += (cmap && cmap[c] != null) ? cmap[c] : String.fromCharCode(c);
+      larg += (tabela && tabela[c] != null) ? tabela[c] : dw;
     }
   }
-  return out;
+  return { t: out, w: larg };
 }
 
 function extrairRuns(conteudo, fontes) {
   var runs = [], n = conteudo.length, i = 0;
-  var tm = [1, 0, 0, 1, 0, 0], tlm = tm.slice(), tl = 0, fonte = null;
+  var tm = [1, 0, 0, 1, 0, 0], tlm = tm.slice(), tl = 0, fonte = null, tfs = 1;
   var pilha = [];
   function trans(m, e, f) {
     return [m[0], m[1], m[2], m[3], m[0] * e + m[2] * f + m[4], m[1] * e + m[3] * f + m[5]];
   }
-  function mostrar(txt) { if (txt) runs.push({ x: tm[4], y: tm[5], t: txt }); }
+  /* largMil = avanço em milésimos de em; vira pontos e anda com a matriz,
+     para a montagem das linhas saber onde cada pedaço termina */
+  function mostrar(txt, largMil) {
+    var av = (largMil / 1000) * tfs * (tm[0] || 1);
+    if (txt) runs.push({ x: tm[4], y: tm[5], t: txt, tam: Math.abs(tfs * (tm[0] || 1)), larg: av });
+    tm = [tm[0], tm[1], tm[2], tm[3], tm[4] + av, tm[5]];
+  }
   function num(desde) { var v = pilha[pilha.length - desde]; return v && v.n != null ? v.n : 0; }
 
   while (i < n) {
@@ -708,23 +750,26 @@ function extrairRuns(conteudo, fontes) {
     else if (op === 'Tf') {
       var nm = null;
       for (var q = pilha.length - 1; q >= 0; q--) if (pilha[q].nome) { nm = pilha[q].nome; break; }
-      fonte = fontes[nm] || null;
+      fonte = fontes[nm] || null; tfs = num(1) || 1;
     }
     else if (op === 'Tj' || op === "'" || op === '"') {
       var st = pilha[pilha.length - 1];
       if (op !== 'Tj') { tlm = trans(tlm, 0, -tl); tm = tlm.slice(); }
-      if (st && st.s != null) mostrar(decodificar(st.s, fonte && fonte.cmap, fonte ? fonte.doisBytes : false));
+      if (st && st.s != null) { var d1 = decodificar(st.s, fonte); mostrar(d1.t, d1.w); }
     }
     else if (op === 'TJ') {
       var a = pilha[pilha.length - 1];
       if (a && a.tj) {
-        var buf = '';
+        var buf = '', wtot = 0;
         for (var z = 0; z < a.tj.length; z++) {
           var it = a.tj[z];
-          if (it.s != null) buf += decodificar(it.s, fonte && fonte.cmap, fonte ? fonte.doisBytes : false);
-          else if (it.n != null && it.n < -120) buf += ' ';
+          if (it.s != null) { var dz = decodificar(it.s, fonte); buf += dz.t; wtot += dz.w; }
+          else if (it.n != null) {
+            wtot -= it.n;                      /* positivo aperta, negativo abre */
+            if (-it.n > 200) buf += ' ';       /* abertura grande: espaço mesmo */
+          }
         }
-        mostrar(buf);
+        mostrar(buf, wtot);
       }
     }
     pilha.length = 0;
@@ -745,12 +790,21 @@ function montarLinhas(runs) {
   var out = [];
   for (i = 0; i < linhas.length; i++) {
     var it = linhas[i].itens.sort(function (a, b) { return a.x - b.x; });
-    var s = '';
+    var s = '', fimAnt = null, tamAnt = 0;
     for (var j = 0; j < it.length; j++) {
       var t = it[j].t;
       if (!t) continue;
-      if (s !== '' && !/\s$/.test(s) && !/^\s/.test(t)) s += ' ';
+      if (s !== '' && !/\s$/.test(s) && !/^\s/.test(t)) {
+        /* o gerador quebra palavras em vários pedaços posicionados: só entra
+           espaço quando há distância de verdade entre o fim de um e o começo
+           do outro. Sem isso sai "CONTRA TO" no lugar de "CONTRATO". */
+        var vao = it[j].x - fimAnt;
+        var minimo = Math.max(0.22 * (tamAnt || it[j].tam || 8), 0.8);
+        if (fimAnt == null || vao > minimo) s += ' ';
+      }
       s += t;
+      fimAnt = it[j].x + (it[j].larg || 0);
+      tamAnt = it[j].tam || tamAnt;
     }
     s = s.replace(/\s+/g, ' ').trim();
     if (s) out.push(s);
@@ -788,7 +842,14 @@ function lerPdf(arrayBuffer) {
     while ((m = re.exec(corpoFontes))) {
       var nome = m[1], fo = objs[+m[2]];
       if (!fo || fontesPorNome[nome]) continue;
-      var reg = { doisBytes: /\/Type0\b/.test(fo.dict) || /Identity/.test(fo.dict), cmap: null };
+      var reg = { doisBytes: /\/Type0\b/.test(fo.dict) || /Identity/.test(fo.dict),
+                  cmap: null, larguras: null, dw: null };
+      /* as larguras ficam na fonte descendente (CIDFont), não na Type0 */
+      var desc = refs(fo.dict, 'DescendantFonts');
+      var dictLarg = (desc.length && objs[desc[0]]) ? objs[desc[0]].dict : fo.dict;
+      reg.larguras = lerLarguras(dictLarg);
+      var mdw = /\/DW\s+(\d+)/.exec(dictLarg);
+      if (mdw) reg.dw = +mdw[1];
       fontesPorNome[nome] = reg;
       var tu = ref(fo.dict, 'ToUnicode');
       if (tu != null && objs[tu]) cmapsPendentes.push({ reg: reg, obj: objs[tu] });
@@ -1276,6 +1337,101 @@ function parseAnalitico(txt){
 
   return d;
 }
+/* ====================== TRCT (Termo de Rescisão) =======================
+   O TRCT é o documento que o empregado assina. Ele é gerado a partir do
+   mesmo cálculo, mas por outro caminho do sistema — divergência entre os
+   dois é erro real e invisível para quem confere só um deles. */
+function normalizar(s){
+  return String(s||'').toUpperCase()
+    .replace(/[ÁÀÂÃÄ]/g,'A').replace(/[ÉÈÊË]/g,'E').replace(/[ÍÌÎÏ]/g,'I')
+    .replace(/[ÓÒÔÕÖ]/g,'O').replace(/[ÚÙÛÜ]/g,'U').replace(/Ç/g,'C')
+    .replace(/[^A-Z0-9]+/g,' ').trim();
+}
+
+function parseTrct(txt){
+  if(!txt||!/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/i.test(txt)) return null;
+  var linhas=txt.replace(/\r/g,'').split('\n'), t={verbas:[],totalBruto:null,totalDeducoes:null,liquido:null};
+
+  function depoisDe(re){
+    for(var i=0;i<linhas.length;i++) if(re.test(linhas[i])) return (linhas[i+1]||'').trim();
+    return '';
+  }
+  var lEmp=depoisDe(/01\s+CNPJ\/CEI\s+02\s+Raz[ãa]o/);
+  var mC=/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\s*(.*)$/.exec(lEmp);
+  if(mC){ t.cnpj=mC[1]; t.empresa=mC[2].trim(); }
+
+  var lNome=depoisDe(/10\s+PIS\/PASEP\s+11\s+Nome/);
+  t.nome=lNome.replace(/^[\d.\-\/]+\s+/,'').trim();     /* tira o PIS quando vem preenchido */
+
+  t.causa=depoisDe(/22\s+Causa\s+do\s+Afastamento/);
+  t.tipoContrato=depoisDe(/21\s+T[ií]po?\s+de\s+Contrato|21\s+Tipo\s+de\s+Contrato/);
+
+  var lDados=depoisDe(/23\s+Remunera[çc][ãa]o\s+M[êe]s\s+Ant/);
+  var datas=lDados.match(/\d{2}\/\d{2}\/\d{4}/g)||[];
+  var mRem=/^([\d.]*\d,\d{2})/.exec(lDados);
+  if(mRem) t.remuneracaoAnterior=nb(mRem[1]);
+  t.admissao=pd(datas[0]); t.dataAviso=pd(datas[1]); t.demissao=pd(datas[2]);
+  var mCod=/\s([A-Z]{2}\d)\s*$/.exec(lDados);
+  if(mCod) t.codAfastamento=mCod[1];
+
+  /* ---- discriminação das verbas ---- */
+  var ini=-1;
+  for(var i=0;i<linhas.length;i++) if(/DISCRIMINA[ÇC][ÃA]O\s+DAS\s+VERBAS/i.test(linhas[i])){ ini=i; break; }
+  if(ini<0) return t;
+
+  var tipo='P', pend=[];
+  for(i=ini+1;i<linhas.length;i++){
+    var l=linhas[i];
+    if(/^\s*DEDU[ÇC][ÕO]ES\s*$/i.test(l)){ tipo='D'; pend=[]; continue; }
+    var vals=l.match(/R\$\s*([\d.]*\d,\d{2})/g)||[];
+
+    if(/TOTAL\s+BRUTO/i.test(l)){ if(vals.length) t.totalBruto=nb(vals[vals.length-1].replace(/R\$\s*/,'')); pend=[]; continue; }
+    if(/TOTAL\s+DEDU/i.test(l)){ if(vals.length) t.totalDeducoes=nb(vals[vals.length-1].replace(/R\$\s*/,'')); pend=[]; continue; }
+    if(/VALOR\s+L[ÍI]QUIDO/i.test(l)){ if(vals.length) t.liquido=nb(vals[vals.length-1].replace(/R\$\s*/,'')); pend=[]; continue; }
+    if(/^\s*(Rubrica|Desconto)\s+Valor/i.test(l)) continue;
+
+    /* códigos do TRCT ficam de 50 a 199; a etiqueta vai até o próximo código */
+    var cods=[], reC=/(?:^|\s)(\d{2,3}(?:\.\d{1,2})?)\s*-?\s+(?=[A-Za-zÀ-ÿ(0-9])/g, mm;
+    while((mm=reC.exec(l))){
+      var base=parseInt(mm[1],10);
+      if(base<50||base>199) continue;
+      cods.push({cod:mm[1], de:mm.index+mm[0].length, ini:mm.index});
+    }
+    for(var k=0;k<cods.length;k++){
+      /* o rótulo quebra para a linha de baixo no formulário: corta o
+         parêntese que ficou aberto em vez de exibir texto pela metade */
+      cods[k].nome=l.slice(cods[k].de, k+1<cods.length?cods[k+1].ini:l.length)
+                    .replace(/\s*\([^)]*$/,'').trim();
+    }
+
+    if(cods.length){ pend=cods; if(!vals.length) continue; }
+    if(vals.length&&pend.length){
+      for(k=0;k<vals.length&&k<pend.length;k++)
+        t.verbas.push({cod:pend[k].cod, nome:pend[k].nome, valor:nb(vals[k].replace(/R\$\s*/,'')), tipo:tipo});
+      pend=[];
+    }
+  }
+  return t;
+}
+
+/* de que grupo do analítico cada caixa do TRCT deve sair */
+var TRCT_MAPA={
+  '50':{g:'saldo',  rot:'Saldo de salário'},
+  '63':{g:'d13',    rot:'13º proporcional'},
+  '65':{g:'feriasProp', rot:'Férias proporcionais'},
+  '66':{g:'feriasVenc', rot:'Férias vencidas'},
+  '68':{g:'terco',  rot:'Terço constitucional'},
+  '69':{g:'avisoTodos', rot:'Aviso prévio indenizado'},
+  '70':{g:'d13Aviso',   rot:'13º sobre o aviso'},
+  '71':{g:'feriasAviso',rot:'Férias sobre o aviso'},
+  '101':{g:'adiant', rot:'Adiantamento salarial'},
+  '106':{g:'vt',     rot:'Vale-transporte'},
+  '112.1':{g:'inssMensal', rot:'Previdência social'},
+  '112.2':{g:'inss13',     rot:'Previdência social do 13º'},
+  '113':{g:'irrf',   rot:'IRRF'},
+  '114':{g:'pensao', rot:'Pensão alimentícia'}
+};
+
 function temRub(d,re,tipo){
   for(var i=0;i<d.rubricas.length;i++){
     var r=d.rubricas[i];
@@ -2112,6 +2268,123 @@ function auditar(d){
       null,null,'Ver o índice de legislação em "Legislação & limites".',
       'Preencha o bloco "Fatos do contrato" na coluna da direita.');
 
+  /* ---- L. TRCT × analítico ---- */
+  G='TRCT × analítico';
+  var tr=d.trct;
+  if(!tr){
+    add('alerta',G,'TRCT não conferido',
+      'Só o relatório analítico foi lido. O TRCT é gerado por outro caminho do sistema e é ele que o empregado assina — divergência entre os dois não aparece conferindo um só.',
+      null,null,'Art. 477, §§1º e 2º, CLT — o termo discrimina as parcelas pagas.',
+      'Solte também o PDF do Termo de Rescisão (Recibo de Rescisão) junto com o analítico.');
+  } else {
+    /* identificação: documentos precisam ser da mesma pessoa e do mesmo evento */
+    if(tr.nome&&d.nome&&normalizar(tr.nome)!==normalizar(d.nome))
+      add('erro',G,'TRCT e analítico são de empregados diferentes',
+        'Analítico: '+esc(d.nome)+'. TRCT: '+esc(tr.nome)+'.',null,null,
+        'Conferência documental','Confira se os arquivos são do mesmo funcionário.');
+    if(tr.cnpj&&d.cnpj&&tr.cnpj.replace(/\D/g,'')!==d.cnpj.replace(/\D/g,''))
+      add('erro',G,'TRCT e analítico são de empresas diferentes',
+        'Analítico: '+esc(d.cnpj)+'. TRCT: '+esc(tr.cnpj)+'.',null,null,'Conferência documental','');
+    [['admissao','Admissão'],['dataAviso','Data do aviso'],['demissao','Afastamento']].forEach(function(par){
+      var a=d[par[0]], b=tr[par[0]];
+      if(a&&b&&difDias(a,b)!==0)
+        add('erro',G,par[1]+' diverge entre TRCT e analítico',
+          'Analítico: '+fd(a)+'. TRCT: '+fd(b)+'.',null,null,'Conferência documental',
+          'Corrija o documento errado e gere os dois de novo.');
+    });
+    if(tr.causa&&motivoDoTexto(tr.causa)!==d.motivo)
+      add('erro',G,'Causa do afastamento diverge',
+        'Analítico: "'+esc(d.motivoTxt||reg.nome)+'". TRCT (campo 22): "'+esc(tr.causa)+'".',null,null,
+        'Conferência documental','A causa define quais verbas são devidas — os dois documentos têm de dizer o mesmo.');
+
+    /* totais */
+    var somaP=0,somaD=0;
+    for(i=0;i<d.rubricas.length;i++){ if(d.rubricas[i].tipo==='P') somaP+=d.rubricas[i].valor; else somaD+=d.rubricas[i].valor; }
+    if(tr.totalBruto!=null)
+      cmp('erro',G,'Total bruto: TRCT × analítico',tr.totalBruto,r2(somaP),
+        'O TRCT declara '+mo(tr.totalBruto)+' e o analítico soma '+mo(somaP)+'.',
+        'Art. 477, §2º CLT','',0.05);
+    if(tr.totalDeducoes!=null)
+      cmp('erro',G,'Total de deduções: TRCT × analítico',tr.totalDeducoes,r2(somaD),
+        'O TRCT declara '+mo(tr.totalDeducoes)+' e o analítico soma '+mo(somaD)+'.','Art. 477, §2º CLT','',0.05);
+    if(tr.liquido!=null)
+      cmp('erro',G,'Líquido: TRCT × analítico',tr.liquido,r2(somaP-somaD),
+        'É o valor que o empregado recebe e assina.','Art. 477, §2º CLT','',0.05);
+
+    /* o TRCT também tem de fechar consigo mesmo */
+    var sTrP=0,sTrD=0;
+    for(i=0;i<tr.verbas.length;i++){ if(tr.verbas[i].tipo==='P') sTrP+=tr.verbas[i].valor; else sTrD+=tr.verbas[i].valor; }
+    if(tr.totalBruto!=null&&tr.verbas.length)
+      cmp('erro',G,'Soma das caixas do TRCT × total bruto declarado',tr.totalBruto,r2(sTrP),
+        'Somei as caixas de verbas do próprio TRCT.','Conferência aritmética',
+        'Se não bate, alguma caixa do termo ficou de fora ou foi digitada à mão.',0.05);
+    if(tr.totalDeducoes!=null&&tr.verbas.length)
+      cmp('erro',G,'Soma das deduções do TRCT × total declarado',tr.totalDeducoes,r2(sTrD),
+        'Somei as caixas de dedução do próprio TRCT.','Conferência aritmética','',0.05);
+
+    /* caixa a caixa, para os campos de significado fixo */
+    var usados={}, consumidas=[], sobraTrct=[];
+    for(i=0;i<tr.verbas.length;i++){
+      var v=tr.verbas[i], mp=TRCT_MAPA[v.cod];
+      if(mp&&C[mp.g]){
+        usados[mp.g]=1;
+        consumidas=consumidas.concat(C[mp.g]);
+        cmp('erro',G,'Campo '+v.cod+' — '+mp.rot,v.valor,soma(C[mp.g]),
+          'TRCT: '+mo(v.valor)+'. Analítico ('+plural(C[mp.g].length,'rubrica','rubricas')+'): '+mo(soma(C[mp.g]))+'.',
+          'Art. 477, §2º CLT — o termo discrimina as parcelas pagas.','',0.05);
+        rr(cods(C[mp.g]));
+      } else sobraTrct.push(v);
+    }
+
+    /* "Outras verbas" (95.x) e "Outros descontos" (115.x) não têm significado
+       fixo, e no formulário a descrição quebra de linha. Em vez de adivinhar
+       pelo texto, reconcilia por conjunto: cada caixa que sobrou tem de achar
+       uma rubrica do analítico ainda não usada, com o mesmo tipo e valor. */
+    var sobraAna=[];
+    for(i=0;i<d.rubricas.length;i++) if(consumidas.indexOf(d.rubricas[i])<0) sobraAna.push(d.rubricas[i]);
+
+    var pendentes=sobraAna.slice(), semPar=[];
+    for(i=0;i<sobraTrct.length;i++){
+      var achou=-1;
+      for(var q=0;q<pendentes.length;q++)
+        if(pendentes[q].tipo===sobraTrct[i].tipo&&ok2(pendentes[q].valor,sobraTrct[i].valor,0.02)){ achou=q; break; }
+      if(achou>=0) pendentes.splice(achou,1); else semPar.push(sobraTrct[i]);
+    }
+    for(i=0;i<semPar.length;i++)
+      add('erro',G,'Campo '+semPar[i].cod+' do TRCT sem rubrica no analítico',
+        '"'+esc(semPar[i].nome)+'" de '+mo(semPar[i].valor)+' não tem correspondente no cálculo.',
+        semPar[i].valor,0,'Art. 477, §2º CLT','Confira se o termo foi editado à mão depois de gerado.');
+    for(i=0;i<pendentes.length;i++)
+      add('erro',G,'Rubrica '+pendentes[i].cod+' não consta do TRCT',
+        '"'+esc(pendentes[i].nome)+'" de '+mo(pendentes[i].valor)+' aparece no analítico e não no termo.',
+        0,pendentes[i].valor,'Art. 477, §2º CLT — parcela não discriminada não gera quitação.',
+        'Regere o TRCT com todas as verbas.');
+    if(sobraTrct.length&&!semPar.length&&!pendentes.length)
+      add('ok',G,'Demais campos do TRCT conferem',
+        plural(sobraTrct.length,'campo','campos')+' de outras verbas e outros descontos casaram, um a um, com as rubricas do analítico.',
+        null,null,'Art. 477, §2º CLT');
+
+    /* grupo relevante no analítico que não apareceu no TRCT */
+    [['saldo','Saldo de salário','50'],['d13','13º proporcional','63'],
+     ['feriasProp','Férias proporcionais','65'],['feriasVenc','Férias vencidas','66'],
+     ['terco','Terço constitucional','68'],['avisoTodos','Aviso prévio indenizado','69'],
+     ['d13Aviso','13º sobre o aviso','70'],['feriasAviso','Férias sobre o aviso','71']
+    ].forEach(function(x){
+      if(usados[x[0]]) return;
+      var val=soma(C[x[0]]||[]);
+      if(val>0.02)
+        add('erro',G,x[1]+' não consta do TRCT',
+          'O analítico traz '+mo(val)+' e o campo '+x[2]+' do termo não foi preenchido.',
+          val,0,'Art. 477, §2º CLT — todas as parcelas pagas têm de ser discriminadas no termo.',
+          'Regere o TRCT; sem a discriminação o pagamento não gera quitação da parcela.');
+    });
+
+    if(tr.remuneracaoAnterior!=null&&sal>0&&tr.remuneracaoAnterior<sal-0.02)
+      add('alerta',G,'Remuneração do mês anterior menor que o salário',
+        'Campo 23 do TRCT: '+mo(tr.remuneracaoAnterior)+'; salário do contrato: '+mo(sal)+'.',
+        null,null,'Campo 23 do TRCT','Confira se o mês anterior teve falta ou afastamento que justifique.');
+  }
+
   /* ---- G. fechamento ---- */
   G='Fechamento';
   var somaP=0,somaD=0;
@@ -2420,6 +2693,27 @@ function renderCalculo(d,res){
   h+='<tr class="tot"><td>Totais</td><td></td><td class="n">'+mo(sp)+'</td><td class="n">'+mo(sd)+'</td></tr>';
   h+='<tr class="tot"><td>Líquido da rescisão</td><td></td><td class="n" colspan="2">'+mo(sp-sd)+'</td></tr>';
   h+='</tbody></table></div>';
+
+  /* TRCT lido */
+  if(d.trct){
+    var tr=d.trct;
+    h+='<div class="card"><h3>TRCT · '+plural(tr.verbas.length,'campo','campos')+'</h3>'+
+       '<table><thead><tr><th>Campo</th><th class="n">Provento</th><th class="n">Dedução</th></tr></thead><tbody>';
+    for(var v=0;v<tr.verbas.length;v++){
+      var vb=tr.verbas[v];
+      h+='<tr><td class="nm">'+esc(vb.nome)+'<br><span class="cod">campo '+esc(vb.cod)+'</span></td>'+
+         '<td class="n">'+(vb.tipo==='P'?mo(vb.valor):'')+'</td>'+
+         '<td class="n">'+(vb.tipo==='D'?mo(vb.valor):'')+'</td></tr>';
+    }
+    h+='<tr class="tot"><td>Totais declarados</td><td class="n">'+mo(tr.totalBruto)+'</td><td class="n">'+mo(tr.totalDeducoes)+'</td></tr>'+
+       '<tr class="tot"><td>Valor líquido</td><td class="n" colspan="2">'+mo(tr.liquido)+'</td></tr>'+
+       '</tbody></table>'+
+       '<div class="card-body"><div class="kvs">'+
+       kv('Causa (campo 22)',tr.causa||'—')+kv('Cód. afastamento (27)',tr.codAfastamento||'—')+
+       kv('Remuneração mês ant. (23)',tr.remuneracaoAnterior!=null?mo(tr.remuneracaoAnterior):'—',1)+
+       kv('Empregado (11)',tr.nome||'—')+
+       '</div></div></div>';
+  }
 
   /* bases */
   var mostrar=['Saldo FGTS','Base FGTS Mensal','FGTS Mensal','Base FGTS 13º','FGTS 13º',
@@ -3201,6 +3495,54 @@ var EX2=[
 '02/12/2024 a 01/12/2025 30,00 3 33,33'
 ].join('\n');
 
+/* TRCT do mesmo caso do EX1, no formato que sai da leitura do PDF */
+var EXTRCT=[
+'TERMO DE RESCISÃO DO CONTRATO DE TRABALHO',
+'IDENTIFICAÇÃO DO EMPREGADOR',
+'01 CNPJ/CEI 02 Razão Social/Nome',
+'11.111.111/0001-11 PAISAGISMO EXEMPLO LTDA',
+'IDENTIFICAÇÃO DO TRABALHADOR',
+'10 PIS/PASEP 11 Nome',
+'FULANO DE TAL',
+'19 Data de Nascimento 20 Nome da Mãe',
+'18/02/2000 MAE EXEMPLO',
+'DADOS DO CONTRATO',
+'21 Tipo de Contrato',
+'1. Contrato de trabalho por prazo indeterminado',
+'22 Causa do Afastamento',
+'Despedida sem justa causa, pelo empregador',
+'23 Remuneração Mês Ant. 24 Data de Admissão 25 Data do Aviso Prévio 26 Data de Afastamento 27 Cod. Afastamento',
+'3.066,96 08/09/2025 28/07/2026 28/07/2026 SJ2',
+'28 Pensão Alim. (%) TRCT 29 Pensão Alim. (%) FGTS 30 Categoria do Trabalhador',
+'0,00 0,00 01 - Empregado',
+'DISCRIMINAÇÃO DAS VERBAS RESCISÓRIAS',
+'VERBAS RESCISÓRIAS',
+'Rubrica Valor Rubrica Valor Rubrica Valor',
+'50 Saldo de 28/dias Salário 63 13º Salário Proporcional 65 Férias Proporc 11/12 avos',
+'R$ 2.067,71 R$ 1.875,75 R$ 2.906,42',
+'(líquido de 0/faltas e DSR) 7/12 avos',
+'68 Terço Constituc. de Férias 69 - Aviso-Prévio Indenizado 70 13º Salário (Aviso Prévio',
+'R$ 1.056,88 R$ 3.170,64 R$ 267,97',
+'30/dias Indenizado)',
+'71 Férias (Aviso-Prévio 95 Outras Verbas (VALE 95.1 Outras Verbas',
+'R$ 264,22 R$ 259,20 R$ 642,06',
+'Indenizado) REFEIÇÃO) (ACUMULO DE FUNÇÃO )',
+'TOTAL BRUTO R$ 12.510,85',
+'DEDUÇÕES',
+'Desconto Valor Desconto Valor Desconto Valor',
+'101 Adiantamento Salarial 106 Vale-Transporte 112.1 Previdência Social',
+'R$ 886,16 R$ 104,00 R$ 171,28',
+'112.2 Prev. Social - 13º 115.1 Outros Descontos 115.2 Outros Descontos',
+'R$ 168,61 R$ 73,85 R$ 1,84',
+'Salário (DIAS FALTAS DSR) (DESCONTO TROCO ADTO.',
+'SAL.)',
+'115.3 Outros Descontos 115.4 Outros Descontos 115.5 Outros Descontos',
+'R$ 0,02 R$ 73,85 R$ 388,70',
+'(TROCO MES ANTERIOR) (DIAS FALTAS) (HORAS FALTAS PARCIAL)',
+'TOTAL DEDUÇÕES R$ 1.868,31',
+'VALOR LÍQUIDO R$ 10.642,54'
+].join('\n');
+
 /* --------------------------------- boot --------------------------------- */
 function msg(cls,txt){$('#msg1').innerHTML='<div class="msg '+cls+'">'+txt+'</div>';}
 
@@ -3209,6 +3551,7 @@ function processar(){
   if(d.erros.length&&!d.rubricas.length){ msg('err',d.erros.join('<br>')); return null; }
   d.cctId=cctSugerida(d);
   d.fatos=fatosPadrao();
+  d.trct=TRCT_PENDENTE; TRCT_PENDENTE=null;
   ABERTOS={};
   renderTudo(d);
   window.scrollTo({top:0,behavior:'auto'});
@@ -3303,6 +3646,7 @@ function ligarUI(){
 }
 
 /* --------------------------- abrir arquivos ----------------------------- */
+var TRCT_PENDENTE=null;   /* TRCT lido junto com o analítico, anexado no processar() */
 function mostrarTexto(){ $('#areaTexto').hidden=false; }
 
 /* pontuação: o quanto o texto parece um relatório analítico de rescisão */
@@ -3319,6 +3663,17 @@ function pontuarRelatorio(txt){
   var rubricas=(txt.match(/^\s*\d{1,6}\s+[A-Za-zÀ-ÿ].*\d[\d.,]*\s*$/gm)||[]).length;
   return p+Math.min(rubricas,40);
 }
+/* o quanto o texto parece um Termo de Rescisão (TRCT) */
+function pontuarTrct(txt){
+  if(!txt) return -1;
+  var t=txt.toUpperCase(), p=0;
+  if(/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/.test(t)) p+=60;
+  if(/DISCRIMINA[ÇC][ÃA]O\s+DAS\s+VERBAS/.test(t)) p+=20;
+  if(/TOTAL\s+BRUTO/.test(t)) p+=10;
+  if(/VALOR\s+L[ÍI]QUIDO/.test(t)) p+=10;
+  if(/RELAT[ÓO]RIO\s+ANAL[ÍI]TICO/.test(t)) p-=60;
+  return p;
+}
 
 function abrirArquivos(lista){
   var arquivos=[].slice.call(lista);
@@ -3330,11 +3685,14 @@ function abrirArquivos(lista){
   msg('ok','Lendo '+plural(arquivos.length,'arquivo','arquivos')+'…');
 
   Promise.all(arquivos.map(function(f){
-    return lerArquivo(f).then(function(txt){ return {nome:f.name, txt:txt, pontos:pontuarRelatorio(txt)}; },
-                              function(e){ return {nome:f.name, erro:e&&e.message||'falha'}; });
+    return lerArquivo(f).then(function(txt){
+        return {nome:f.name, txt:txt, pontos:pontuarRelatorio(txt), pontosTrct:pontuarTrct(txt)}; },
+      function(e){ return {nome:f.name, erro:e&&e.message||'falha'}; });
   })).then(function(res){
     var bons=res.filter(function(r){return r.txt&&r.pontos>0;});
     bons.sort(function(a,b){return b.pontos-a.pontos;});
+    var trcts=res.filter(function(r){return r.txt&&r.pontosTrct>0;});
+    trcts.sort(function(a,b){return b.pontosTrct-a.pontosTrct;});
     if(!bons.length){
       var motivos={'pdf-protegido':'o PDF está protegido por senha',
                    'sem-camada-de-texto':'o PDF é uma imagem digitalizada, sem texto',
@@ -3345,16 +3703,23 @@ function abrirArquivos(lista){
         return '<b>'+esc(r.nome)+'</b>: '+(r.erro?(motivos[r.erro]||r.erro)
                :'não parece um relatório analítico de rescisão');
       }).join('<br>');
-      msg('err','Não achei um relatório analítico utilizável.<br>'+det+
-        '<br><br>Se o arquivo estiver certo, abra o PDF, copie o texto e use <b>ou colar o texto</b>.');
+      var dica=trcts.length
+        ? '<br><br>Li o <b>Termo de Rescisão</b>, mas ele sozinho não basta: os avos, as bases e as médias só existem no <b>relatório analítico</b>. Solte os dois juntos.'
+        : '<br><br>Se o arquivo estiver certo, abra o PDF, copie o texto e use <b>ou colar o texto</b>.';
+      msg('err','Não achei um relatório analítico utilizável.<br>'+det+dica);
       mostrarTexto();
       return;
     }
     $('#txt').value=bons[0].txt;
+    TRCT_PENDENTE=trcts.length?parseTrct(trcts[0].txt):null;
+    var temTrct=!!TRCT_PENDENTE;          /* processar() consome a variável */
     var d=processar();
     if(d){
-      var extra=res.length>1?' Ignorei '+plural(res.length-1,'outro arquivo','outros arquivos')+'.':'';
-      msg('ok','Li <b>'+esc(bons[0].nome)+'</b>.'+extra+' Confira os dados lidos na coluna do cálculo.');
+      var usados=1+(temTrct?1:0);
+      var extra=res.length>usados?' Ignorei '+plural(res.length-usados,'outro arquivo','outros arquivos')+'.':'';
+      msg('ok','Li <b>'+esc(bons[0].nome)+'</b>'+
+        (temTrct?' e conferi contra <b>'+esc(trcts[0].nome)+'</b>':
+          ' — <b>sem o TRCT</b>, que fica sem conferência')+'.'+extra);
     }
   });
 }
@@ -3544,9 +3909,10 @@ function autoteste(){
   /* --- contagem e veredito --- */
   var cg1=contagem(F1), cg2=contagem(F2);
   T('V1 caso correto sem erro',cg1.erro===0,cg1.erro);
-  T('V1 alertas são só os dois pedidos de informação',cg1.alerta===2
+  T('V1 alertas são só os pedidos de informação',cg1.alerta===3
       &&acha(F1,/Nenhuma conven[çc][ãa]o coletiva aplicada/)!=null
-      &&acha(F1,/Nenhum fato do contrato informado/)!=null,
+      &&acha(F1,/Nenhum fato do contrato informado/)!=null
+      &&acha(F1,/TRCT não conferido/)!=null,
     (function(){var s=[];for(var i=0;i<F1.length;i++)if(F1[i].sev==='alerta')s.push(F1[i].titulo);return s.join(' | ');})());
   T('V1 impacto zero no caso correto',ok2(cg1.impacto,0),cg1.impacto);
   T('V2 impacto = 53,77',ok2(cg2.impacto,53.77,0.02),cg2.impacto);
@@ -3705,6 +4071,81 @@ function autoteste(){
   T('PDF demais dados intactos',dPdf.rubricas.length===34&&dPdf.totalP===12510.85);
   T('PDF auditoria idêntica à do texto colado',
     (function(){var a=auditar(parseAnalitico(EX1)).findings.length, b=auditar(dPdf).findings.length; return a===b;}));
+
+  /* --- TRCT: leitura e conferência cruzada --- */
+  var TR=parseTrct(EXTRCT);
+  T('TR reconhece o termo',TR!=null);
+  T('TR ignora quem não é TRCT',parseTrct(EX1)===null);
+  T('TR empresa e CNPJ',TR.empresa==='PAISAGISMO EXEMPLO LTDA'&&TR.cnpj==='11.111.111/0001-11',TR.empresa+' / '+TR.cnpj);
+  T('TR nome do empregado',TR.nome==='FULANO DE TAL',TR.nome);
+  T('TR causa do afastamento',/Despedida sem justa causa/.test(TR.causa),TR.causa);
+  T('TR código de afastamento',TR.codAfastamento==='SJ2',TR.codAfastamento);
+  T('TR datas do contrato',fd(TR.admissao)==='08/09/2025'&&fd(TR.dataAviso)==='28/07/2026'&&fd(TR.demissao)==='28/07/2026');
+  T('TR remuneração do mês anterior',TR.remuneracaoAnterior===3066.96,TR.remuneracaoAnterior);
+  T('TR leu 18 campos',TR.verbas.length===18,TR.verbas.length);
+  T('TR totais declarados',TR.totalBruto===12510.85&&TR.totalDeducoes===1868.31&&TR.liquido===10642.54);
+  T('TR soma das caixas bate com o bruto',(function(){var s=0;TR.verbas.forEach(function(v){if(v.tipo==='P')s+=v.valor;});return ok2(s,12510.85,0.02);})());
+  T('TR soma das deduções bate',(function(){var s=0;TR.verbas.forEach(function(v){if(v.tipo==='D')s+=v.valor;});return ok2(s,1868.31,0.02);})());
+  T('TR separa provento de dedução',(function(){
+    var p=0,dd=0;TR.verbas.forEach(function(v){if(v.tipo==='P')p++;else dd++;});return p===9&&dd===9;})(),
+    JSON.stringify(TR.verbas.map(function(v){return v.tipo;})));
+  T('TR campo 50 é o saldo',(function(){for(var i=0;i<TR.verbas.length;i++)if(TR.verbas[i].cod==='50')return TR.verbas[i].valor===2067.71;return false;})());
+  T('TR campo 112.1 é o INSS',(function(){for(var i=0;i<TR.verbas.length;i++)if(TR.verbas[i].cod==='112.1')return TR.verbas[i].valor===171.28&&TR.verbas[i].tipo==='D';return false;})());
+  T('TR rótulo com parêntese aberto é aparado',(function(){
+    for(var i=0;i<TR.verbas.length;i++) if(/\($/.test(TR.verbas[i].nome)||/\([^)]*$/.test(TR.verbas[i].nome)) return false;
+    return true;})(),JSON.stringify(TR.verbas.map(function(v){return v.nome;})));
+  T('TR não confunde número do formulário com código',(function(){
+    for(var i=0;i<TR.verbas.length;i++){var b=parseInt(TR.verbas[i].cod,10); if(b<50||b>199) return false;}
+    return true;})());
+
+  function comTrct(mudar){
+    var x=clone(d1);
+    x.trct=JSON.parse(JSON.stringify(parseTrct(EXTRCT)));
+    ['admissao','dataAviso','demissao'].forEach(function(k){
+      var o=parseTrct(EXTRCT)[k]; x.trct[k]=o?new Date(o.getTime()):null;
+    });
+    if(mudar) mudar(x.trct);
+    return auditar(x).findings.filter(function(f){return f.grupo==='TRCT × analítico';});
+  }
+  var Ft=comTrct(null);
+  T('TR conferência sem erro no caso correto',
+    Ft.filter(function(f){return f.sev==='erro';}).length===0,
+    Ft.filter(function(f){return f.sev==='erro';}).map(function(f){return f.titulo;}).join(' | '));
+  T('TR confere os três totais',
+    achaSev(Ft,/Total bruto: TRCT/,'ok')!=null&&achaSev(Ft,/Total de deduções: TRCT/,'ok')!=null&&achaSev(Ft,/L[ií]quido: TRCT/,'ok')!=null);
+  T('TR confere caixa a caixa',achaSev(Ft,/Campo 50 — Saldo de sal/,'ok')!=null&&achaSev(Ft,/Campo 69 — Aviso/,'ok')!=null);
+  T('TR reconcilia outras verbas e outros descontos',achaSev(Ft,/Demais campos do TRCT conferem/,'ok')!=null);
+  T('TR nenhum campo ficou sem conferência',acha(Ft,/sem confer[êe]ncia autom/)==null);
+
+  T('TR acusa empregado diferente',achaSev(comTrct(function(t){t.nome='OUTRA PESSOA';}),/empregados diferentes/,'erro')!=null);
+  T('TR acusa empresa diferente',achaSev(comTrct(function(t){t.cnpj='99.999.999/0001-99';}),/empresas diferentes/,'erro')!=null);
+  T('TR aceita nome com acentuação diferente',acha(comTrct(function(t){t.nome='fulano de tal';}),/empregados diferentes/)==null);
+  T('TR acusa data divergente',achaSev(comTrct(function(t){t.demissao=pd('30/07/2026');}),/Afastamento diverge/,'erro')!=null);
+  T('TR acusa causa divergente',achaSev(comTrct(function(t){t.causa='Pedido de demissão';}),/Causa do afastamento diverge/,'erro')!=null);
+  T('TR acusa total bruto divergente',achaSev(comTrct(function(t){t.totalBruto=12000;}),/Total bruto: TRCT/,'erro')!=null);
+  T('TR acusa líquido divergente',achaSev(comTrct(function(t){t.liquido=9000;}),/L[ií]quido: TRCT/,'erro')!=null);
+  T('TR acusa caixa com valor errado',
+    achaSev(comTrct(function(t){for(var i=0;i<t.verbas.length;i++)if(t.verbas[i].cod==='63')t.verbas[i].valor=1000;}),
+      /Campo 63/,'erro')!=null);
+  T('TR acusa verba paga e não discriminada',
+    achaSev(comTrct(function(t){t.verbas=t.verbas.filter(function(v){return v.cod!=='68';});}),
+      /Ter[çc]o constitucional não consta do TRCT/,'erro')!=null);
+  T('TR acusa caixa do termo sem rubrica no cálculo',
+    achaSev(comTrct(function(t){t.verbas.push({cod:'95.2',nome:'Outras Verbas',valor:500,tipo:'P'});}),
+      /Campo 95\.2 do TRCT sem rubrica/,'erro')!=null);
+  T('TR acusa rubrica ausente do termo',
+    achaSev(comTrct(function(t){t.verbas=t.verbas.filter(function(v){return v.cod!=='115.5';});}),
+      /não consta do TRCT/,'erro')!=null);
+  T('TR acusa termo que não fecha consigo mesmo',
+    achaSev(comTrct(function(t){t.verbas[0].valor=1;}),/Soma das caixas do TRCT/,'erro')!=null);
+  T('TR alerta remuneração anterior menor que o salário',
+    achaSev(comTrct(function(t){t.remuneracaoAnterior=1000;}),/Remunera[çc][ãa]o do m[êe]s anterior menor/,'alerta')!=null);
+  T('TR sem termo vira pedido de conferência',
+    achaSev(auditar(clone(d1)).findings,/TRCT não conferido/,'alerta')!=null);
+
+  T('TR pontua o termo acima do analítico',pontuarTrct(EXTRCT)>50&&pontuarTrct(EX1)<0);
+  T('TR analítico não é confundido com termo',pontuarRelatorio(EXTRCT)<0);
+  T('TR normalizar tira acento e pontuação',normalizar('Férias Proporc. 11/12')==='FERIAS PROPORC 11 12',normalizar('Férias Proporc. 11/12'));
 
   /* --- fatos do contrato: estabilidades, tipo de contrato, procedimento --- */
   function comFatos(dados,mot){
@@ -3945,7 +4386,7 @@ function autoteste(){
     pis:['111.11111.11-1']
   };
   function soPermitidos(re,ok,g){
-    var achados=(EX1+EX2).match(re)||[];
+    var achados=(EX1+EX2+EXTRCT).match(re)||[];
     if(!achados.length) return false;
     for(var i=0;i<achados.length;i++){
       var v=achados[i].replace(g,'').trim();
@@ -3958,13 +4399,16 @@ function autoteste(){
   T('X exemplo 2 fictício',d2.nome===FICT.nomes[1]&&d2.cnpj===FICT.cnpjs[1]&&d2.empresa===FICT.empresas[1],
     d2.nome+' / '+d2.cnpj+' / '+d2.empresa);
   T('X só CNPJ fictício nos fixtures',soPermitidos(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g,FICT.cnpjs,/^$/),
-    ((EX1+EX2).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g)||[]).join(' '));
   T('X só CTPS fictício nos fixtures',soPermitidos(/CTPS:\s*\d+/g,FICT.ctps,/CTPS:\s*/),
-    ((EX1+EX2).match(/CTPS:\s*\d+/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT).match(/CTPS:\s*\d+/g)||[]).join(' '));
   T('X só PIS fictício nos fixtures',soPermitidos(/PIS:\s*[\d.-]+/g,FICT.pis,/PIS:\s*/),
-    ((EX1+EX2).match(/PIS:\s*[\d.-]+/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT).match(/PIS:\s*[\d.-]+/g)||[]).join(' '));
   T('X nome do empregado é da lista fictícia',
     FICT.nomes.indexOf(d1.nome)>=0&&FICT.nomes.indexOf(d2.nome)>=0);
+  T('X TRCT de exemplo também é fictício',
+    TR.nome===FICT.nomes[0]&&TR.cnpj===FICT.cnpjs[0]&&TR.empresa===FICT.empresas[0],
+    TR.nome+' / '+TR.cnpj+' / '+TR.empresa);
 
   /* --- parser robusto --- */
   T('parser texto vazio',parseAnalitico('').erros.length>0);
@@ -4006,10 +4450,11 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 
 /* exporta para o runner em Node */
 if(typeof module!=='undefined'&&module.exports){
-  module.exports={autoteste:autoteste,parseAnalitico:parseAnalitico,auditar:auditar,EX1:EX1,EX2:EX2};
+  module.exports={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,
+    auditar:auditar,EX1:EX1,EX2:EX2};
 }
-window.MXRESC={autoteste:autoteste,parseAnalitico:parseAnalitico,auditar:auditar,EX1:EX1,EX2:EX2,
-  calcInss:calcInss,avos13:avos13,avosFerias:avosFerias};
+window.MXRESC={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,auditar:auditar,
+  EX1:EX1,EX2:EX2,calcInss:calcInss,avos13:avos13,avosFerias:avosFerias};
 })();
 </script>
 </body>

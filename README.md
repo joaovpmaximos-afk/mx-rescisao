@@ -60,6 +60,29 @@ teto de compensação do art. 477 §5º.
 
 **Fechamento** — soma de proventos, de descontos e o líquido.
 
+## TRCT × analítico
+
+O TRCT (Termo de Rescisão) é o documento que o empregado assina, e o sistema o gera por um
+caminho diferente do relatório analítico. Quando alguém corrige o cálculo e regera só um dos
+dois, a divergência não aparece para quem confere um só — e o termo é o que vale como quitação.
+
+Solte os dois PDFs juntos. O app identifica qual é qual e cruza:
+
+- **Identificação** — nome, CNPJ, admissão, aviso, afastamento e a causa do afastamento
+  (campo 22). Documento de outra pessoa ou de outro evento vira erro na hora.
+- **Totais** — bruto, deduções e líquido do termo contra a soma do analítico.
+- **O termo contra ele mesmo** — a soma das caixas tem de bater com o total que ele declara.
+  Se não bate, alguma caixa foi editada à mão depois de gerada.
+- **Caixa a caixa** — campos 50, 63, 65, 66, 68, 69, 70, 71, 101, 106, 112.1, 112.2, 113 e 114
+  contra o grupo de rubricas correspondente.
+- **Outras verbas e outros descontos** (95.x e 115.x) não têm significado fixo, e no formulário
+  a descrição quebra de linha. Em vez de adivinhar pelo texto, a reconciliação é por conjunto:
+  cada caixa que sobrou tem de achar uma rubrica ainda não usada, com mesmo tipo e valor.
+  Sobrou caixa sem rubrica, ou rubrica sem caixa, vira erro — é exatamente o caso da verba paga
+  e não discriminada, que não gera quitação (art. 477, §2º).
+
+Sem o TRCT o app avisa que essa camada ficou de fora, em vez de dar a rescisão por conferida.
+
 ## Fatos do contrato
 
 O relatório analítico traz números, não fatos. **A maior parte do que anula uma rescisão não
@@ -136,10 +159,12 @@ essas duas conferências saem como **atenção**, não como erro.
 - No navegador: `index.html?teste=1` — caixa de resultado no canto inferior direito.
 - No terminal: `node testar.js`
 
-306 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
+346 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
 (dicionários aninhados, CMap, matriz de texto, montagem de linhas, escolha do arquivo certo),
 parser dos dois
-relatórios reais, auditoria completa dos dois casos, o vínculo achado→rubrica que alimenta o
+relatórios reais, leitura do TRCT e a conferência cruzada (identificação, totais, caixa a caixa
+e reconciliação por conjunto, com dez cenários de divergência), auditoria completa dos dois
+casos, o vínculo achado→rubrica que alimenta o
 destaque cruzado, o veredito, as unidades dos achados, o módulo de convenções (vigência,
 piso, aviso ampliado, data-base, multa, assistencial, homologação, estabilidade, cláusulas
 livres), os fatos do contrato (as seis estabilidades, art. 479 e 481, limite da experiência,
