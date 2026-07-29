@@ -59,6 +59,36 @@ teto de compensação do art. 477 §5º.
 
 **Fechamento** — soma de proventos, de descontos e o líquido.
 
+## Fatos do contrato
+
+O relatório analítico traz números, não fatos. **A maior parte do que anula uma rescisão não
+está nele**: gravidez, acidente de trabalho, mandato na CIPA ou no sindicato, contrato de
+experiência, banco de horas, exame demissional. Sem isso a conferência tem um teto.
+
+Por isso a coluna da direita tem o bloco **Fatos do contrato**, em quatro grupos. Cada resposta
+liga verificações novas na hora — não há botão de confirmar.
+
+| Grupo | Destrava |
+|---|---|
+| Garantias de emprego | Estabilidade da gestante, acidentária, CIPA, dirigente sindical, comissão de representantes, lei de cotas, contrato suspenso pelo INSS, pré-aposentadoria da convenção |
+| Tipo de contrato | Indenização do art. 479, cláusula assecuratória, limite de 90 dias da experiência, aviso e multa indevidos no prazo determinado, intermitente, parcial, FGTS de aprendiz (2%) e de doméstico (8% + 3,2%) |
+| Jornada e adicionais | Banco de horas na rescisão, insalubridade, periculosidade, adicional noturno, comissões e DSR, gorjetas, redução do aviso trabalhado |
+| Procedimento e descontos | Exame demissional, baixa na CTPS e eSocial, guias do seguro-desemprego, dispensa coletiva, pensão alimentícia, dedução de dependentes |
+
+**Não informado nunca vira erro.** As obrigações do empregador têm três estados — sim, não e
+não informado. Só o "não" é afirmado como falha; o branco vira pendência, e enquanto o bloco
+estiver intocado nem as pendências aparecem, só um aviso único de que ~30 verificações estão
+desligadas. Um conferidor que grita erro sobre pergunta que ninguém fez deixa de ser confiável.
+
+## Legislação & limites
+
+O botão **Legislação** abre o índice do que a ferramenta sabe conferir — mais de 60 normas
+entre Constituição, CLT, leis, decretos, súmulas do TST e precedentes do STF e do STJ — com a
+situação de cada uma: *conferido*, *conferido pelos fatos do contrato* ou *não conferido*.
+
+No fim do mesmo painel está a lista do **que ela não verifica**. Saber onde a ferramenta para
+é o que evita a falsa sensação de que está tudo conferido.
+
 ## Convenções coletivas (CCT / ACT)
 
 Botão **Convenções** na barra superior. Cada convenção é cadastrada uma vez e passa a ser
@@ -105,13 +135,16 @@ essas duas conferências saem como **atenção**, não como erro.
 - No navegador: `index.html?teste=1` — caixa de resultado no canto inferior direito.
 - No terminal: `node testar.js`
 
-214 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, parser dos dois
+278 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, parser dos dois
 relatórios reais, auditoria completa dos dois casos, o vínculo achado→rubrica que alimenta o
 destaque cruzado, o veredito, as unidades dos achados, o módulo de convenções (vigência,
 piso, aviso ampliado, data-base, multa, assistencial, homologação, estabilidade, cláusulas
-livres) e 18 cenários sintéticos de erro (pagamento atrasado, projeção errada, justa causa
-com verbas indevidas, avo do aviso esquecido, terço faltando, multa a menor, aviso indenizado
-na base do INSS, médias ausentes, férias em dobro, VT acima de 6%, compensação excessiva).
+livres), os fatos do contrato (as seis estabilidades, art. 479 e 481, limite da experiência,
+FGTS por categoria, contribuição de 10% extinta, banco de horas, adicionais, redução do aviso,
+procedimento em três estados) e 18 cenários sintéticos de erro (pagamento atrasado, projeção
+errada, justa causa com verbas indevidas, avo do aviso esquecido, terço faltando, multa a
+menor, aviso indenizado na base do INSS, médias ausentes, férias em dobro, VT acima de 6%,
+compensação excessiva).
 
 ## Notas de implementação
 

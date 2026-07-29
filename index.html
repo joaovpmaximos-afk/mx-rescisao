@@ -403,6 +403,7 @@ input:focus,select:focus{outline:none;border-color:var(--brand)}
   </div>
   <div class="topact">
     <button class="btn ghost" id="btNovo" hidden aria-label="Nova conferência"><span class="rot">Nova conferência</span></button>
+    <button class="btn" id="btLeis" aria-label="Legislação e limites"><span class="rot">Legislação</span></button>
     <button class="btn" id="btConvencoes" aria-label="Convenções coletivas"><span class="rot">Convenções</span></button>
     <button class="btn" id="btTabelas" aria-label="Tabelas e regras"><span class="rot">Tabelas</span></button>
     <button class="btn icon" id="btPrint" title="Imprimir laudo" aria-label="Imprimir laudo" hidden></button>
@@ -549,7 +550,8 @@ var SVG={
   escudo:'<path d="M12 3 4.5 6v6c0 4.4 3.1 8.2 7.5 9 4.4-.8 7.5-4.6 7.5-9V6L12 3Z"/><path d="m9 12 2 2 4-4"/>',
   voltar:'<path d="M19 12H5M12 19l-7-7 7-7"/>',
   ajustes:'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h10M18 18h2"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>',
-  convencao:'<path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v6h6M9 13h6M9 17h4"/>'
+  convencao:'<path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v6h6M9 13h6M9 17h4"/>',
+  balanca:'<path d="M12 3v18M7 21h10M4 7h16M8 7l-4 7h8L8 7ZM16 7l-4 7h8l-4-7Z"/>'
 };
 function ico(n,cls){
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '+
@@ -596,6 +598,43 @@ function calcIrrf(base){
   }
   return 0;
 }
+
+/* ================== fatos que o relatório não informa ===================
+   Estabilidades, tipo de contrato, adicionais e procedimento não aparecem no
+   relatório analítico. Sem estas respostas boa parte da lei fica fora do
+   alcance da conferência — por isso elas são perguntadas. */
+function fatosPadrao(){
+  return {
+    tipoContrato:'indeterminado', fimPrevisto:'', assecuratoria:false,
+    categoria:'urbano',
+    gestante:false, parto:'',
+    acidente:false, altaAcidente:'',
+    cipa:false, cipaAte:'',
+    sindical:false, sindicalAte:'',
+    comissao:false, comissaoAte:'',
+    pcd:false, substituto:false,
+    afastadoInss:false,
+    aposentadoria:'',
+    bancoHoras:0,
+    /* obrigações do empregador: '' = não perguntado, 'sim' = cumprida, 'nao' = não cumprida.
+       Não informado nunca vira erro — só o que foi respondido "não" é afirmado como falha. */
+    exameDemissional:'',
+    avisoReducao:'',
+    insalubridade:0, periculosidade:false, noturno:false,
+    comissoes:false, gorjetas:false,
+    dependentes:0, pensaoPerc:0,
+    dispensaColetiva:false,
+    ctpsEsocial:'', guiasSD:''
+  };
+}
+/* quantas perguntas foram respondidas (para o app saber o quanto ainda não sabe) */
+function fatosRespondidos(f){
+  if(!f) return 0;
+  var p=fatosPadrao(), n=0;
+  for(var k in p) if(JSON.stringify(f[k])!==JSON.stringify(p[k])) n++;
+  return n;
+}
+var FGTS_ALIQ={urbano:8, rural:8, domestico:8, aprendiz:2};
 
 /* ==================== convenções coletivas (CCT / ACT) ==================
    Cadastro local. Cláusulas estruturadas são conferidas automaticamente;
@@ -959,6 +998,8 @@ function auditar(d){
   var sal=d.salario||0;
   var cct=d.cctId?cctPorId(d.cctId):null;
   var prazo=prazoPagamento(cct);
+  var f=d.fatos||fatosPadrao();
+  var aposentadoria=pd(f.aposentadoria)||d.aposentadoria||null;
 
   function add(sev,grupo,titulo,txt,dec,esp,lei,fix){
     F.push({sev:sev,grupo:grupo,titulo:titulo,txt:txt,
@@ -1444,12 +1485,12 @@ function auditar(d){
     }
 
     /* estabilidade pré-aposentadoria */
-    if(cct.estabilidade&&cct.estabilidade.preAposMeses>0&&(d.motivo==='sjc')&&d.aposentadoria&&d.admissao&&d.demissao){
+    if(cct.estabilidade&&cct.estabilidade.preAposMeses>0&&(d.motivo==='sjc')&&aposentadoria&&d.admissao&&d.demissao){
       var anosCasa=anosContrato(d);
-      var janela=addMeses(d.aposentadoria,-cct.estabilidade.preAposMeses);
-      if(anosCasa>=(cct.estabilidade.preAposAnosCasa||0)&&d.demissao>=janela&&d.demissao<=d.aposentadoria)
+      var janela=addMeses(aposentadoria,-cct.estabilidade.preAposMeses);
+      if(anosCasa>=(cct.estabilidade.preAposAnosCasa||0)&&d.demissao>=janela&&d.demissao<=aposentadoria)
         add('erro',G,'Dispensa dentro da estabilidade pré-aposentadoria',
-          'Aposentadoria prevista para '+fd(d.aposentadoria)+'; a convenção garante emprego nos '+cct.estabilidade.preAposMeses+
+          'Aposentadoria prevista para '+fd(aposentadoria)+'; a convenção garante emprego nos '+cct.estabilidade.preAposMeses+
           ' meses anteriores (a partir de '+fd(janela)+') para quem tem '+(cct.estabilidade.preAposAnosCasa||0)+'+ anos de casa. Este contrato tem '+anosCasa+'.',
           null,null,'Cláusula de garantia de emprego pré-aposentadoria da convenção coletiva.',
           'A dispensa é nula: reintegre ou pague os salários do período de garantia.');
@@ -1479,6 +1520,239 @@ function auditar(d){
         cl.tipo==='informativo'?'':'Esta cláusula não tem conferência automática. Verifique no cálculo antes de fechar.');
     }
   }
+
+  /* ---- I. estabilidades e garantias de emprego ---- */
+  var patronal=(d.motivo==='sjc'||d.motivo==='acordo');
+  var sevEstab=(d.motivo==='acordo')?'alerta':'erro';
+  G='Estabilidades';
+
+  function garantia(rot,ativa,ate,base,lei,fix){
+    if(!ativa) return;
+    if(!ate){
+      add('alerta',G,rot+' — data não informada',
+        'A garantia foi marcada mas sem a data que define o fim da estabilidade, então não dá para conferir.',
+        null,null,lei,'Informe a data em "Fatos do contrato".');
+      return;
+    }
+    if(!patronal){
+      add('info',G,rot+' — não se aplica a este motivo',
+        'A garantia protege contra dispensa pelo empregador. Motivo lançado: '+reg.nome+'.',null,null,lei,'');
+      return;
+    }
+    if(d.demissao&&d.demissao<=ate)
+      add(sevEstab,G,'Dispensa dentro da '+rot.toLowerCase(),
+        base+' A estabilidade vai até '+fd(ate)+' e o afastamento foi em '+fd(d.demissao)+'.',
+        null,null,lei,fix||'A dispensa é nula: reintegre ou pague os salários e vantagens de todo o período de garantia.');
+    else
+      add('ok',G,rot,'Estabilidade encerrada em '+fd(ate)+', antes do afastamento em '+fd(d.demissao)+'.',null,null,lei);
+  }
+
+  var parto=pd(f.parto);
+  garantia('Estabilidade da gestante',f.gestante,parto?addMeses(parto,5):null,
+    'Parto em '+fd(parto)+' + 5 meses.',
+    'Art. 10, II, "b", ADCT — da confirmação da gravidez até 5 meses após o parto. Súmula 244 TST: o desconhecimento do empregador não afasta o direito, e a garantia vale inclusive no contrato de experiência (item III).');
+  var alta=pd(f.altaAcidente);
+  garantia('Estabilidade acidentária',f.acidente,alta?addMeses(alta,12):null,
+    'Alta do auxílio-doença acidentário em '+fd(alta)+' + 12 meses.',
+    'Art. 118 da Lei 8.213/91 e Súmula 378 TST — 12 meses após a cessação do auxílio-doença acidentário; o item II dispensa o afastamento quando constatada doença profissional.');
+  var cipaAte=pd(f.cipaAte);
+  garantia('Estabilidade de membro da CIPA',f.cipa,cipaAte?addMeses(cipaAte,12):null,
+    'Fim do mandato em '+fd(cipaAte)+' + 1 ano.',
+    'Art. 10, II, "a", ADCT e Súmula 339 TST — do registro da candidatura até 1 ano após o fim do mandato, inclusive para o suplente.');
+  var sindAte=pd(f.sindicalAte);
+  garantia('Estabilidade de dirigente sindical',f.sindical,sindAte?addMeses(sindAte,12):null,
+    'Fim do mandato em '+fd(sindAte)+' + 1 ano.',
+    'Art. 543, §3º, CLT e Súmula 369 TST — exige comunicação do registro da candidatura ao empregador em 24 horas.');
+  var comAte=pd(f.comissaoAte);
+  garantia('Estabilidade da comissão de representantes',f.comissao,comAte?addMeses(comAte,12):null,
+    'Fim do mandato em '+fd(comAte)+' + 1 ano.',
+    'Art. 510-D, §3º, CLT — do registro da candidatura até 1 ano após o fim do mandato.');
+
+  if(f.pcd&&patronal){
+    if(!f.substituto)
+      add(sevEstab,G,'Dispensa de empregado com deficiência sem substituto',
+        'A dispensa só é válida com a contratação prévia de substituto em condição semelhante.',
+        null,null,'Art. 93, §1º, da Lei 8.213/91','Contrate o substituto antes de formalizar a dispensa.');
+    else add('ok',G,'Dispensa de empregado com deficiência','Substituto contratado, como exige a lei de cotas.',null,null,'Art. 93, §1º da Lei 8.213/91');
+  }
+  if(f.afastadoInss)
+    add(patronal?'erro':'alerta',G,'Empregado afastado pelo INSS na data do desligamento',
+      'Durante o benefício previdenciário o contrato fica suspenso e não pode ser rompido.',
+      null,null,'Art. 476 CLT e Súmula 371 TST — a suspensão impede a dispensa e o aviso prévio não corre no período.',
+      'Aguarde a alta médica para formalizar o desligamento.');
+
+  /* ---- J. tipo de contrato ---- */
+  G='Tipo de contrato';
+  var fimPrev=pd(f.fimPrevisto), determinado=(f.tipoContrato==='experiencia'||f.tipoContrato==='determinado');
+  if(determinado){
+    var rotC=f.tipoContrato==='experiencia'?'contrato de experiência':'contrato por prazo determinado';
+    if(f.tipoContrato==='experiencia'&&d.admissao&&fimPrev&&difDias(d.admissao,fimPrev)+1>90)
+      add('erro',G,'Contrato de experiência acima de 90 dias',
+        'De '+fd(d.admissao)+' a '+fd(fimPrev)+' são '+(difDias(d.admissao,fimPrev)+1)+' dias.',
+        difDias(d.admissao,fimPrev)+1,90,
+        'Art. 445, § único, CLT — máximo de 90 dias, admitida uma única prorrogação dentro desse limite (Súmula 188 TST).',
+        'Passando de 90 dias o contrato vira por prazo indeterminado, e a rescisão muda por completo.');
+    if(fimPrev&&d.demissao&&d.demissao<fimPrev){
+      var diasRest=difDias(d.demissao,fimPrev);
+      if(f.assecuratoria){
+        add('info',G,'Rompimento antecipado com cláusula assecuratória',
+          'Com a cláusula do art. 481 o rompimento antecipado segue as regras do contrato por prazo indeterminado — aviso prévio e, na dispensa sem justa causa, multa de 40%.',
+          null,null,'Art. 481 CLT e Súmula 163 TST','');
+      } else if(patronal){
+        var ind479=r2(sal/30*diasRest/2);
+        var tem479=temRub(d,/ART\.?\s*479|INDENIZ.*ANTECIPAD|METADE.*RESTANTE/,'P');
+        if(!tem479)
+          add('erro',G,'Indenização do art. 479 não paga',
+            'O '+rotC+' foi rompido pelo empregador '+plural(diasRest,'dia','dias')+' antes do fim previsto ('+fd(fimPrev)+'). '+
+            'Sem cláusula assecuratória, é devida metade da remuneração do período restante — e não há aviso prévio nem multa de 40%.',
+            0,ind479,'Art. 479 CLT','Lance a indenização de '+mo(ind479)+' e confira se o aviso prévio foi indevidamente pago.');
+        else add('ok',G,'Indenização do art. 479','Rompimento antecipado com a indenização lançada.',null,null,'Art. 479 CLT');
+        if(C.avisoTodos.length&&!f.assecuratoria)
+          add('erro',G,'Aviso prévio em contrato por prazo determinado',
+            'Sem cláusula assecuratória não cabe aviso prévio no rompimento antecipado — o que se paga é a indenização do art. 479.',
+            soma(C.avisoTodos),0,'Arts. 479 e 481 CLT','Estorne o aviso e lance a indenização do art. 479.');
+      } else if(d.motivo==='pedido'){
+        add('alerta',G,'Rompimento antecipado pelo empregado',
+          'O empregado deve indenizar os prejuízos, limitados ao valor do art. 479 ('+mo(r2(sal/30*diasRest/2))+').',
+          null,null,'Art. 480 CLT','O desconto depende de prejuízo comprovado; não é automático.');
+      }
+    }
+    if(reg.multa>0&&!f.assecuratoria&&fimPrev&&d.demissao&&d.demissao<fimPrev)
+      add('erro','FGTS','Multa de 40% em contrato por prazo determinado',
+        'Sem cláusula assecuratória o rompimento antecipado não gera multa de 40%; gera a indenização do art. 479.',
+        B['FGTS 40%']||0,0,'Art. 18, §1º, da Lei 8.036/90 c/c art. 479 CLT','');
+    if(d.motivo==='termino'&&C.avisoTodos.length)
+      add('erro',G,'Aviso prévio no término normal do contrato',
+        'Chegando ao termo final não há aviso prévio a pagar.',soma(C.avisoTodos),0,'Art. 481 CLT, a contrario sensu','');
+  }
+  if(f.tipoContrato==='intermitente')
+    add('alerta',G,'Contrato intermitente',
+      'As verbas são apuradas sobre os períodos efetivamente trabalhados, e a inatividade não conta como tempo à disposição.',
+      null,null,'Art. 452-A CLT','Confira se a base de cada verba considerou só os períodos convocados.');
+  if(f.tipoContrato==='parcial')
+    add('alerta',G,'Contrato em regime parcial',
+      'Confira o limite de jornada e as horas extras, que têm tratamento próprio.',
+      null,null,'Art. 58-A CLT','');
+
+  /* categorias com regra de FGTS própria */
+  G='FGTS';
+  var aliqEsp=FGTS_ALIQ[f.categoria]||8;
+  if(aliqEsp!==CFG.fgts&&bFm!=null&&fM!=null)
+    add('erro',G,'Alíquota do FGTS da categoria',
+      'Categoria "'+f.categoria+'" recolhe '+aliqEsp+'%, e o cálculo usou '+CFG.fgts+'%.',
+      fM,r2(bFm*aliqEsp/100),
+      f.categoria==='aprendiz'?'Art. 15, §7º, da Lei 8.036/90 — aprendiz recolhe 2%.':'Regra própria da categoria.',
+      'Ajuste a alíquota em Tabelas & regras e refaça.');
+  if(f.categoria==='domestico'){
+    add('alerta',G,'Empregado doméstico — regime próprio do FGTS',
+      'O doméstico tem 8% de FGTS mais 3,2% de depósito indenizatório mensal, que substitui a multa de 40%.',
+      null,null,'Art. 22 da LC 150/2015','Na dispensa sem justa causa o empregado saca os 3,2%; não se lança multa de 40%.');
+    if((B['FGTS 40%']||0)>0.02)
+      add('erro',G,'Multa de 40% para empregado doméstico',
+        'O doméstico não tem multa de 40% — tem o depósito indenizatório de 3,2%.',B['FGTS 40%'],0,'Art. 22 da LC 150/2015','');
+  }
+  var cs10=B['Contribuição Social 10%'];
+  if(cs10!=null&&cs10>0.02)
+    add('erro',G,'Contribuição social de 10% cobrada',
+      'A contribuição de 10% sobre o FGTS foi extinta e não é devida desde 1º de janeiro de 2020.',
+      cs10,0,'Art. 1º da LC 110/2001, revogado pela Lei 13.932/2019','Estorne o valor.');
+
+  /* ---- K. jornada, adicionais e procedimento ---- */
+  G='Jornada e adicionais';
+  if(f.bancoHoras>0){
+    var vBanco=r2(sal/CFG.horasMes*f.bancoHoras*1.5);
+    add('erro',G,'Saldo de banco de horas não pago',
+      'Há '+String(f.bancoHoras).replace('.',',')+' hora(s) de saldo. Na rescisão o saldo não compensado é pago como hora extra.',
+      0,vBanco,'Art. 59, §3º, CLT','Lance as horas com o adicional devido (usei 50% para a estimativa de '+mo(vBanco)+').');
+  }
+  if(f.insalubridade>0&&!temRub(d,/INSALUB/,'P'))
+    add('erro',G,'Insalubridade não integrada',
+      'Foi informado adicional de insalubridade de '+f.insalubridade+'% e nenhuma rubrica correspondente aparece no cálculo.',
+      null,null,'Art. 192 CLT e Súmula 139 TST — o adicional, quando devido, integra a remuneração para todos os efeitos.',
+      'Inclua o adicional e reflita em 13º, férias, aviso e FGTS.');
+  if(f.periculosidade&&!temRub(d,/PERICUL/,'P'))
+    add('erro',G,'Periculosidade não integrada',
+      'Foi informado adicional de periculosidade e nenhuma rubrica correspondente aparece no cálculo.',
+      null,null,'Art. 193, §1º, CLT — 30% sobre o salário base, integrando as demais verbas.','');
+  if(f.noturno&&!temRub(d,/NOTURN/,'P'))
+    add('alerta',G,'Adicional noturno não localizado',
+      'Foi informado trabalho noturno e nenhuma rubrica de adicional aparece no cálculo.',
+      null,null,'Art. 73 CLT e Súmula 60 TST — mínimo de 20%, com hora reduzida de 52min30s e reflexo na prorrogação.','');
+  if(f.comissoes){
+    if(!temRub(d,/COMISS/,'P')&&!temRub(d,/M[EÉ]DIA/,'P'))
+      add('erro',G,'Comissões habituais sem média nas verbas',
+        'Comissões integram a remuneração e devem compor a média de 13º, férias e aviso.',
+        null,null,'Súmulas 27, 340 e OJ 397 da SDI-1 do TST','');
+    if(!temRub(d,/DSR|REPOUSO/,'P'))
+      add('alerta',G,'Reflexo das comissões no DSR',
+        'Comissões geram reflexo no descanso semanal remunerado e nenhuma rubrica de DSR aparece.',
+        null,null,'Art. 7º da Lei 605/49 e Súmula 27 TST','');
+  }
+  if(f.gorjetas)
+    add('alerta',G,'Gorjetas integram a remuneração',
+      'Gorjetas integram para 13º, férias e FGTS, mas não para aviso prévio, adicional noturno, horas extras e DSR.',
+      null,null,'Art. 457, §3º, CLT e Súmula 354 TST','Confira quais verbas usaram a base com gorjetas.');
+  if(d.tipoAviso==='trabalhado'){
+    if(f.avisoReducao==='nenhuma')
+      add('erro',G,'Aviso trabalhado sem a redução legal',
+        'No aviso trabalhado o empregado tem direito a reduzir 2 horas por dia ou faltar 7 dias corridos, sem prejuízo do salário.',
+        null,null,'Art. 488 CLT e Súmula 230 TST — substituir a redução por pagamento em dinheiro é nulo.',
+        'Sem a redução o aviso é nulo e deve ser pago de novo, indenizado.');
+    else if(f.avisoReducao==='2h'||f.avisoReducao==='7dias')
+      add('ok',G,'Redução do aviso trabalhado','Concedida na forma do art. 488.',null,null,'Art. 488 CLT');
+    else if(fatosRespondidos(f)>0)
+      add('alerta',G,'Redução do aviso trabalhado — não informada',
+        'Não foi informado se houve redução de 2 horas por dia ou de 7 dias corridos.',
+        null,null,'Art. 488 CLT e Súmula 230 TST','Responda em "Fatos do contrato".');
+  }
+
+  G='Procedimento';
+  var respondidos=fatosRespondidos(f), perguntou=respondidos>0;
+  /* obrigação em três estados: só "nao" vira erro; em branco é pendência, e
+     nem isso aparece enquanto o bloco de fatos estiver intocado. */
+  function obrigacao(valor,quando,rot,txtNao,txtBranco,lei,fix){
+    if(!quando) return;
+    if(valor==='nao') add('erro',G,rot,txtNao,null,null,lei,fix);
+    else if(valor==='sim') add('ok',G,rot,'Confirmado.',null,null,lei);
+    else if(perguntou) add('alerta',G,rot+' — não informado',txtBranco,null,null,lei,'Responda em "Fatos do contrato".');
+  }
+  obrigacao(f.exameDemissional,patronal,'Exame demissional',
+    'O exame demissional não foi realizado, e ele é obrigatório no desligamento.',
+    'Não foi informado se o exame demissional foi realizado.',
+    'Art. 168, II, CLT e NR-7 — dispensável só se o último exame ocorreu há menos de 135 dias (risco baixo) ou 90 dias (risco alto).',
+    'Providencie o ASO demissional antes de homologar.');
+  obrigacao(f.ctpsEsocial,true,'Baixa na CTPS e no eSocial',
+    'A baixa não foi anotada nem o evento de desligamento enviado.',
+    'Não foi informado se a baixa na CTPS e o evento do eSocial foram feitos.',
+    'Art. 29, §1º, CLT e art. 477, §6º — evento S-2299 do eSocial no mesmo prazo do pagamento.',
+    'Envie antes de encerrar o processo.');
+  obrigacao(f.guiasSD,!!reg.seguro,'Guias do seguro-desemprego',
+    'As guias não foram entregues, e o motivo lançado dá direito ao benefício.',
+    'Não foi informado se as guias do seguro-desemprego foram entregues.',
+    'Art. 477, §10, CLT e Lei 7.998/90 — a falta das guias gera indenização substitutiva (Súmula 389 TST).',
+    'Entregue as guias ou provisione a indenização.');
+  if(f.dispensaColetiva)
+    add('info',G,'Dispensa coletiva',
+      'A dispensa coletiva não depende de autorização prévia do sindicato nem de acordo coletivo.',
+      null,null,'Art. 477-A CLT','');
+  if(f.pensaoPerc>0&&!C.pensao.length)
+    add('erro',G,'Pensão alimentícia não descontada',
+      'Foi informado desconto de '+String(f.pensaoPerc).replace('.',',')+'% e nenhuma rubrica de pensão aparece no cálculo.',
+      null,null,'Art. 529, § único, do CPC e art. 462 CLT','Confira a decisão judicial: a base costuma alcançar as verbas rescisórias.');
+  if(f.dependentes>0&&decBaseIr!=null&&CFG.dep>0){
+    var deducao=r2(f.dependentes*CFG.dep);
+    add('alerta','IRRF','Dedução de dependentes',
+      f.dependentes+' dependente(s) informado(s) = '+mo(deducao)+' de dedução na base do IRRF.',
+      null,null,'Art. 4º, III, da Lei 9.250/95','Confira se o cálculo aplicou a dedução.');
+  }
+
+  /* o quanto a conferência ainda depende de informação que ninguém deu */
+  if(!perguntou)
+    add('alerta','Estabilidades','Nenhum fato do contrato informado',
+      'Estabilidades, tipo de contrato, adicionais e procedimento não constam do relatório analítico. '+
+      'Sem responder o bloco "Fatos do contrato", cerca de 30 verificações não são executadas — inclusive as que anulam a dispensa.',
+      null,null,'Ver o índice de legislação em "Legislação & limites".',
+      'Preencha o bloco "Fatos do contrato" na coluna da direita.');
 
   /* ---- G. fechamento ---- */
   G='Fechamento';
@@ -1769,6 +2043,9 @@ function renderCalculo(d,res){
      '<div class="full"><button class="btn primary" id="bRecalc">Recalcular</button></div>'+
      '</div></details></div>';
 
+  /* fatos que o relatório não traz */
+  h+=htmlFatos(d);
+
   /* rubricas */
   h+='<div class="card"><h3>Rubricas lançadas · '+d.rubricas.length+'</h3>'+
      '<table><thead><tr><th>Rubrica</th><th class="n">Ref.</th><th class="n">Provento</th><th class="n">Desconto</th></tr></thead><tbody>';
@@ -1808,6 +2085,20 @@ function renderCalculo(d,res){
 
   $('#confBody').innerHTML=h;
   $('#bRecalc').onclick=recalcular;
+
+  /* fatos: reconfere a cada resposta, preservando o bloco aberto e a rolagem */
+  $$('#confBody details[data-g]').forEach(function(dt){
+    dt.addEventListener('toggle',function(){ ABERTOS[dt.getAttribute('data-g')]=dt.open; });
+  });
+  $$('#confBody [data-f]').forEach(function(inp){
+    inp.addEventListener('change',function(){
+      var col=$('.col-calc'), y=col?col.scrollTop:0;
+      lerFatos();
+      renderTudo(ATUAL);
+      var col2=$('.col-calc'); if(col2) col2.scrollTop=y;
+    });
+  });
+
   var sc=$('#selCct');
   if(sc) sc.onchange=function(){
     if(sc.value==='__nova'){ sc.value=ATUAL.cctId||''; abrirConvencoes(); return; }
@@ -1847,6 +2138,88 @@ function cctSugerida(d){
 function kv(k,v,mono){
   return '<div class="kv"><label>'+esc(k)+'</label><b'+(mono?' class="mono"':'')+'>'+esc(v)+'</b></div>';
 }
+
+/* ------------------- fatos do contrato (questionário) ------------------- */
+var ABERTOS={};   /* quais blocos ficam abertos entre um render e outro */
+
+function htmlFatos(d){
+  var f=d.fatos||fatosPadrao(), n=fatosRespondidos(f);
+  function txt(k,rot,ph){return '<div><label for="ft_'+k+'">'+esc(rot)+'</label>'+
+    '<input id="ft_'+k+'" data-f="'+k+'" value="'+esc(f[k]==null?'':f[k])+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+'></div>';}
+  function chk(k,rot){return '<div class="full"><label class="opcao" for="ft_'+k+'" style="display:flex;align-items:center;gap:10px;'+
+    'text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--tx);cursor:pointer;margin:0">'+
+    '<input type="checkbox" id="ft_'+k+'" data-f="'+k+'"'+(f[k]?' checked':'')+' style="width:20px;min-height:20px;flex:none">'+esc(rot)+'</label></div>';}
+  function sel(k,rot,ops){
+    var s='<div><label for="ft_'+k+'">'+esc(rot)+'</label><select id="ft_'+k+'" data-f="'+k+'">';
+    for(var i=0;i<ops.length;i++){var p=ops[i].split('|');
+      s+='<option value="'+p[0]+'"'+(f[k]===p[0]?' selected':'')+'>'+esc(p[1])+'</option>';}
+    return s+'</select></div>';
+  }
+  function grupo(tit,corpo,aberto){
+    /* registra o estado inicial: sem isso o bloco fecharia sozinho na primeira resposta */
+    if(!(tit in ABERTOS)) ABERTOS[tit]=!!aberto;
+    var on=ABERTOS[tit];
+    return '<details class="ajustes" data-g="'+esc(tit)+'"'+(on?' open':'')+'><summary>'+esc(tit)+'</summary>'+
+           '<div class="form">'+corpo+'</div></details>';
+  }
+
+  var h='<div class="card"><h3>Fatos do contrato'+(n?' · '+plural(n,'resposta','respostas'):'')+'</h3>'+
+    '<div class="card-body" style="padding-bottom:4px"><p style="margin:0;color:var(--tx2);font-size:12.5px">'+
+    (n?'Cada resposta liga verificações que o relatório analítico não permite fazer sozinho.'
+      :'<b style="color:var(--alerta-tx)">Nada respondido ainda.</b> Estabilidades, tipo de contrato e adicionais não constam do relatório — sem estas respostas cerca de 30 verificações ficam de fora, inclusive as que anulam a dispensa.')+
+    '</p></div>';
+
+  h+=grupo('Garantias de emprego',
+    chk('gestante','Empregada gestante')+txt('parto','Parto (previsto ou ocorrido)','dd/mm/aaaa')+
+    chk('acidente','Afastamento por acidente ou doença do trabalho')+txt('altaAcidente','Alta do auxílio acidentário','dd/mm/aaaa')+
+    chk('cipa','Membro da CIPA (titular ou suplente)')+txt('cipaAte','Fim do mandato na CIPA','dd/mm/aaaa')+
+    chk('sindical','Dirigente sindical')+txt('sindicalAte','Fim do mandato sindical','dd/mm/aaaa')+
+    chk('comissao','Comissão de representantes (art. 510-D)')+txt('comissaoAte','Fim do mandato','dd/mm/aaaa')+
+    chk('pcd','Empregado com deficiência ou reabilitado')+
+    chk('substituto','Substituto já contratado (lei de cotas)')+
+    chk('afastadoInss','Afastado pelo INSS na data do desligamento')+
+    txt('aposentadoria','Aposentadoria prevista para','dd/mm/aaaa'), !n);
+
+  h+=grupo('Tipo de contrato',
+    sel('tipoContrato','Modalidade',['indeterminado|Prazo indeterminado','experiencia|Contrato de experiência',
+      'determinado|Prazo determinado','intermitente|Intermitente','parcial|Regime parcial'])+
+    sel('categoria','Categoria',['urbano|Urbano (regra geral)','domestico|Doméstico','rural|Rural','aprendiz|Aprendiz'])+
+    txt('fimPrevisto','Fim previsto do contrato','dd/mm/aaaa')+'<div></div>'+
+    chk('assecuratoria','Tem cláusula assecuratória de rescisão antecipada (art. 481)'));
+
+  h+=grupo('Jornada e adicionais',
+    txt('bancoHoras','Saldo de banco de horas (horas)','0')+
+    txt('insalubridade','Insalubridade (%)','0')+
+    chk('periculosidade','Recebia periculosidade')+
+    chk('noturno','Trabalhava em horário noturno')+
+    chk('comissoes','Recebia comissões habituais')+
+    chk('gorjetas','Recebia gorjetas')+
+    sel('avisoReducao','No aviso trabalhado, houve redução',
+      ['|Não se aplica / não informado','2h|Redução de 2 horas por dia','7dias|Falta de 7 dias corridos','nenhuma|Nenhuma redução']));
+
+  var SN=['|Não informado','sim|Sim','nao|Não'];
+  h+=grupo('Procedimento e descontos',
+    sel('exameDemissional','Exame demissional realizado',SN)+
+    sel('ctpsEsocial','Baixa na CTPS e eSocial enviados',SN)+
+    sel('guiasSD','Guias do seguro-desemprego entregues',SN)+
+    '<div></div>'+
+    chk('dispensaColetiva','Dispensa coletiva')+
+    txt('dependentes','Dependentes para IRRF','0')+
+    txt('pensaoPerc','Pensão alimentícia (%)','0'));
+
+  return h+'</div>';
+}
+function lerFatos(){
+  if(!ATUAL) return;
+  var f=ATUAL.fatos||fatosPadrao();
+  $$('#confBody [data-f]').forEach(function(inp){
+    var k=inp.getAttribute('data-f');
+    if(inp.type==='checkbox') f[k]=!!inp.checked;
+    else if(/^(bancoHoras|insalubridade|dependentes|pensaoPerc)$/.test(k)) f[k]=nb(inp.value);
+    else f[k]=inp.value;
+  });
+  ATUAL.fatos=f;
+}
 function campo(id,rot,val){
   return '<div><label for="'+id+'">'+esc(rot)+'</label><input id="'+id+'" value="'+esc(val)+'"></div>';
 }
@@ -1861,6 +2234,7 @@ function campoSel(id,rot,mapa,sel){
 
 function recalcular(){
   if(!ATUAL) return;
+  lerFatos();
   ATUAL.motivo=$('#fMotivo').value;
   ATUAL.tipoAviso=$('#fAviso').value;
   ATUAL.salario=nb($('#fSal').value)||ATUAL.salario;
@@ -1888,6 +2262,7 @@ function pintarDrawer(){
   var t=$('#drawerTitulo');
   if(MODO==='tabelas'){ t.textContent='Tabelas & regras'; $('#drawerBody').innerHTML=htmlTabelas(); ligarDrawer(); }
   else if(MODO==='convencoes'){ t.textContent='Convenções coletivas'; $('#drawerBody').innerHTML=htmlListaCct(); ligarListaCct(); }
+  else if(MODO==='leis'){ t.textContent='Legislação & limites'; $('#drawerBody').innerHTML=htmlLeis(); }
   else { t.textContent=EDITANDO&&EDITANDO.nome?EDITANDO.nome:'Nova convenção'; $('#drawerBody').innerHTML=htmlEditorCct(); ligarEditorCct(); }
   $('#drawerBody').scrollTop=0;
 }
@@ -1965,6 +2340,109 @@ function htmlTabelas(){
   h+='</tbody></table></div></div>';
   return h;
 }
+/* ------------------------ legislação e limites -------------------------- */
+var LEIS=[
+ ['Constituição e ADCT',[
+  ['Art. 7º, V, CF','Piso salarial da categoria','Conferido com o piso da convenção'],
+  ['Art. 7º, XVI, CF','Adicional mínimo de 50% na hora extra','Conferido com o % da convenção'],
+  ['Art. 7º, XVII, CF','Terço constitucional de férias','Conferido sobre todas as parcelas'],
+  ['Art. 10, II, "a", ADCT','Estabilidade do membro da CIPA','Conferido pelos fatos do contrato'],
+  ['Art. 10, II, "b", ADCT','Estabilidade da gestante','Conferido pelos fatos do contrato']]],
+ ['CLT — aviso prévio e rescisão',[
+  ['Art. 64','Salário-dia é a remuneração dividida por 30','Conferido no saldo e nas faltas'],
+  ['Art. 439','Assistência ao menor de 18 anos','Conferido pela data de nascimento'],
+  ['Art. 445, § único','Experiência no máximo 90 dias','Conferido pelos fatos do contrato'],
+  ['Art. 462','Descontos permitidos','Conferido nos descontos lançados'],
+  ['Art. 467','Dobra das verbas incontroversas','Só em processo — não conferido'],
+  ['Art. 476','Suspensão do contrato no benefício do INSS','Conferido pelos fatos do contrato'],
+  ['Art. 477, §5º','Compensação limitada a uma remuneração','Conferido'],
+  ['Art. 477, §6º','Prazo de 10 dias corridos','Conferido, com o encurtamento da convenção'],
+  ['Art. 477, §8º','Multa de um salário pelo atraso','Conferido'],
+  ['Art. 477, §10','Entrega das guias do seguro-desemprego','Conferido pelos fatos do contrato'],
+  ['Art. 477-A','Dispensa coletiva sem autorização sindical','Informativo'],
+  ['Art. 479 e 480','Rompimento antecipado do contrato determinado','Conferido pelos fatos do contrato'],
+  ['Art. 481','Cláusula assecuratória','Conferido pelos fatos do contrato'],
+  ['Art. 487','Aviso prévio, projeção e desconto do não cumprido','Conferido'],
+  ['Art. 488','Redução de 2h ou 7 dias no aviso trabalhado','Conferido pelos fatos do contrato'],
+  ['Art. 489','Reconsideração do aviso','Não conferido'],
+  ['Art. 507-B','Termo de quitação anual','Não conferido']]],
+ ['CLT — férias, 13º e jornada',[
+  ['Art. 130','Redução das férias por faltas injustificadas','Conferido'],
+  ['Art. 137','Férias em dobro fora do período concessivo','Conferido'],
+  ['Art. 146, § único','Férias proporcionais','Conferido'],
+  ['Art. 59, §3º','Banco de horas pago na rescisão','Conferido pelos fatos do contrato'],
+  ['Art. 71, §4º','Intervalo intrajornada suprimido','Não conferido'],
+  ['Art. 73','Adicional noturno','Conferido pelos fatos do contrato'],
+  ['Art. 192 e 193','Insalubridade e periculosidade','Conferido pelos fatos do contrato'],
+  ['Art. 457, §2º','Prêmios, diárias e ajuda de custo não integram','Não conferido'],
+  ['Art. 457, §3º','Gorjetas','Conferido pelos fatos do contrato'],
+  ['Art. 58-A e 452-A','Regime parcial e intermitente','Alerta pelos fatos do contrato']]],
+ ['Leis e decretos',[
+  ['Lei 4.090/62','13º salário proporcional','Conferido'],
+  ['Lei 605/49','Descanso semanal remunerado','Conferido nos reflexos'],
+  ['Lei 6.708/79, art. 9º','Indenização adicional da data-base','Conferido pela convenção'],
+  ['Lei 7.998/90','Seguro-desemprego','Conferido pelos fatos do contrato'],
+  ['Lei 8.036/90, art. 15 e 18','FGTS, alíquotas e multa rescisória','Conferido'],
+  ['Lei 8.036/90, art. 15, §7º','FGTS do aprendiz a 2%','Conferido pelos fatos do contrato'],
+  ['Lei 8.212/91, art. 28, §9º','Verbas fora da base do INSS','Conferido'],
+  ['Lei 8.213/91, art. 93, §1º','Dispensa de empregado com deficiência','Conferido pelos fatos do contrato'],
+  ['Lei 8.213/91, art. 118','Estabilidade acidentária','Conferido pelos fatos do contrato'],
+  ['Lei 9.250/95, art. 4º','Dedução de dependentes no IRRF','Alerta pelos fatos do contrato'],
+  ['Lei 12.506/2011','Aviso prévio proporcional','Conferido'],
+  ['LC 110/2001, art. 1º','Contribuição de 10% — revogada pela Lei 13.932/2019','Conferido: deve ser zero'],
+  ['LC 150/2015, art. 22','FGTS do doméstico: 8% + 3,2%','Conferido pelos fatos do contrato'],
+  ['Dec. 3.048/99, art. 214, §6º','INSS do 13º em separado','Conferido'],
+  ['Dec. 95.247/87, art. 9º','Vale-transporte limitado a 6%','Conferido'],
+  ['NR-7 e art. 168, II, CLT','Exame demissional','Conferido pelos fatos do contrato']]],
+ ['Súmulas e orientações',[
+  ['Súmula 27, 340 e OJ 397 TST','Comissões: DSR e médias','Conferido pelos fatos do contrato'],
+  ['Súmula 45, 60, 172 e 347 TST','Habituais integram 13º, férias e aviso','Conferido'],
+  ['Súmula 81 TST','Férias em dobro','Conferido'],
+  ['Súmula 125 e 386 STJ','Aviso e férias indenizadas sem IRRF','Considerado nas bases'],
+  ['Súmula 163 TST','Aviso na cláusula assecuratória','Conferido pelos fatos do contrato'],
+  ['Súmula 171 TST','Justa causa faz perder férias proporcionais','Conferido'],
+  ['Súmula 182 e 314 TST','Projeção do aviso alcança a data-base','Conferido pela convenção'],
+  ['Súmula 188 TST','Uma única prorrogação da experiência','Conferido pelos fatos do contrato'],
+  ['Súmula 230 TST','Redução do aviso não se troca por dinheiro','Conferido pelos fatos do contrato'],
+  ['Súmula 244 TST','Gestante, inclusive na experiência','Conferido pelos fatos do contrato'],
+  ['Súmula 261 TST','Férias proporcionais com menos de um ano','Conferido'],
+  ['Súmula 305 e OJ 82 SDI-1','Projeção do aviso gera avos e FGTS','Conferido'],
+  ['Súmula 339 e 369 TST','CIPA e dirigente sindical','Conferido pelos fatos do contrato'],
+  ['Súmula 354 TST','Gorjetas','Conferido pelos fatos do contrato'],
+  ['Súmula 371 e 378 TST','Suspensão do contrato e estabilidade acidentária','Conferido pelos fatos do contrato'],
+  ['Súmula 389 TST','Indenização pela falta das guias','Alerta pelos fatos do contrato'],
+  ['STF, Tema 935','Contribuição assistencial com direito de oposição','Conferido pela convenção'],
+  ['STJ, REsp 1.230.957','Aviso indenizado fora da base do INSS','Conferido']]]
+];
+var LIMITES=[
+ 'Não lê o PDF: depende do texto colado do relatório analítico e das respostas dos fatos do contrato.',
+ 'Não confere a folha do contrato inteiro — só a rescisão. Diferença salarial, equiparação, horas extras não pagas ao longo do contrato e desvio de função ficam fora.',
+ 'Não valida o cartão de ponto nem a jornada real; o banco de horas depende do saldo que você informar.',
+ 'Não conhece o texto das convenções: aplica o que estiver cadastrado, e o que não tem campo próprio depende das cláusulas livres.',
+ 'Não apura verbas de natureza judicial (dobra do art. 467, danos morais, adicional por acúmulo sem previsão).',
+ 'A tabela do INSS teve só a primeira faixa confirmada; IRRF é estimativa editável. Por isso essas duas conferências saem como atenção, nunca como erro.',
+ 'Não substitui a leitura do TRCT e do extrato do FGTS antes de fechar.'
+];
+function htmlLeis(){
+  var h='<div class="aviso">Este índice mostra <b>o que a ferramenta sabe conferir e como</b>. '+
+    'Regra marcada como "conferido pelos fatos do contrato" só roda depois que o bloco de fatos for respondido.</div>';
+  for(var i=0;i<LEIS.length;i++){
+    h+='<div class="card"><h3>'+esc(LEIS[i][0])+'</h3><table><tbody>';
+    var l=LEIS[i][1];
+    for(var j=0;j<l.length;j++){
+      var st=l[j][2], cor=/Não conferido|Só em processo/.test(st)?'var(--tx3)':(/^Conferido$|^Conferido /.test(st)?'var(--ok-tx)':'var(--alerta-tx)');
+      h+='<tr><td class="nm" style="width:38%">'+esc(l[j][0])+'</td><td>'+esc(l[j][1])+
+         '</td><td style="color:'+cor+';font-size:11.5px;width:26%">'+esc(l[j][2])+'</td></tr>';
+    }
+    h+='</tbody></table></div>';
+  }
+  h+='<div class="card"><h3>O que esta ferramenta não verifica</h3><div class="card-body">'+
+     '<p style="margin:0 0 10px;color:var(--tx2);font-size:12.5px">Saber onde ela para é o que evita a falsa sensação de que está tudo conferido.</p><ul style="margin:0;padding-left:18px;color:var(--tx2);font-size:13px">';
+  for(i=0;i<LIMITES.length;i++) h+='<li style="margin-bottom:7px">'+esc(LIMITES[i])+'</li>';
+  h+='</ul></div></div>';
+  return h;
+}
+
 /* ---------------------- convenções: lista e editor ---------------------- */
 function htmlListaCct(){
   var h='<div class="aviso">Cadastre aqui a convenção (CCT) ou o acordo (ACT) de cada categoria. '+
@@ -2372,6 +2850,8 @@ function processar(){
   var d=parseAnalitico($('#txt').value);
   if(d.erros.length&&!d.rubricas.length){ msg('err',d.erros.join('<br>')); return null; }
   d.cctId=cctSugerida(d);
+  d.fatos=fatosPadrao();
+  ABERTOS={};
   renderTudo(d);
   window.scrollTo({top:0,behavior:'auto'});
   return d;
@@ -2407,6 +2887,7 @@ function ligarUI(){
   $('.dz-mark').innerHTML=ico('colar');
   $('#btNovo').insertBefore(el('span',null,ico('voltar')).firstChild,$('#btNovo').firstChild);
   $('#btConvencoes').insertBefore(el('span',null,ico('convencao')).firstChild,$('#btConvencoes').firstChild);
+  $('#btLeis').insertBefore(el('span',null,ico('balanca')).firstChild,$('#btLeis').firstChild);
   $('#btTabelas').insertBefore(el('span',null,ico('ajustes')).firstChild,$('#btTabelas').firstChild);
 
   var t;
@@ -2421,6 +2902,7 @@ function ligarUI(){
   $('#btNovo').onclick=voltarEntrada;
   $('#btTabelas').onclick=function(){abrirDrawer('tabelas');};
   $('#btConvencoes').onclick=abrirConvencoes;
+  $('#btLeis').onclick=function(){abrirDrawer('leis');};
   $('#btFecharDrawer').onclick=fecharDrawer;
   $('#scrim').onclick=fecharDrawer;
   document.addEventListener('keydown',function(e){
@@ -2629,7 +3111,9 @@ function autoteste(){
   /* --- contagem e veredito --- */
   var cg1=contagem(F1), cg2=contagem(F2);
   T('V1 caso correto sem erro',cg1.erro===0,cg1.erro);
-  T('V1 único alerta é a falta de convenção',cg1.alerta===1&&acha(F1,/Nenhuma conven[çc][ãa]o coletiva aplicada/)!=null,
+  T('V1 alertas são só os dois pedidos de informação',cg1.alerta===2
+      &&acha(F1,/Nenhuma conven[çc][ãa]o coletiva aplicada/)!=null
+      &&acha(F1,/Nenhum fato do contrato informado/)!=null,
     (function(){var s=[];for(var i=0;i<F1.length;i++)if(F1[i].sev==='alerta')s.push(F1[i].titulo);return s.join(' | ');})());
   T('V1 impacto zero no caso correto',ok2(cg1.impacto,0),cg1.impacto);
   T('V2 impacto = 53,77',ok2(cg2.impacto,53.77,0.02),cg2.impacto);
@@ -2725,6 +3209,109 @@ function autoteste(){
 
   x=clone(d1); x.admissao=pd('08/09/2020');
   T('E18 aviso proporcional (5 anos) cobrado',achaSev(auditar(x).findings,/Dias de aviso/,'erro')!=null);
+
+  /* --- fatos do contrato: estabilidades, tipo de contrato, procedimento --- */
+  function comFatos(dados,mot){
+    var x=clone(d1); x.fatos=fatosPadrao();
+    for(var k in (dados||{})) x.fatos[k]=dados[k];
+    if(mot) x.motivo=mot;
+    return auditar(x).findings;
+  }
+  var Ff;
+  T('F padrão não responde nada',fatosRespondidos(fatosPadrao())===0);
+  T('F conta respostas',fatosRespondidos((function(){var p=fatosPadrao();p.gestante=true;p.parto='01/01/2026';return p;})())===2);
+  T('F avisa quando nada foi informado',achaSev(comFatos({}),/Nenhum fato do contrato informado/,'alerta')!=null);
+
+  /* gestante */
+  Ff=comFatos({gestante:true,parto:'01/05/2026'});   // +5 meses = 01/10/2026 > demissão 28/07/2026
+  T('F gestante: dispensa dentro da estabilidade',achaSev(Ff,/estabilidade da gestante/i,'erro')!=null);
+  Ff=comFatos({gestante:true,parto:'01/01/2026'});   // +5 meses = 01/06/2026 < demissão
+  T('F gestante: estabilidade já encerrada',achaSev(Ff,/Estabilidade da gestante/,'ok')!=null);
+  Ff=comFatos({gestante:true});
+  T('F gestante sem data avisa',achaSev(Ff,/gestante — data não informada/i,'alerta')!=null);
+  Ff=comFatos({gestante:true,parto:'01/05/2026'},'pedido');
+  T('F gestante não se aplica ao pedido de demissão',achaSev(Ff,/não se aplica a este motivo/,'info')!=null);
+  Ff=comFatos({gestante:true,parto:'01/05/2026'},'acordo');
+  T('F gestante no acordo vira alerta',achaSev(Ff,/estabilidade da gestante/i,'alerta')!=null);
+
+  /* demais garantias */
+  T('F acidentária dentro dos 12 meses',achaSev(comFatos({acidente:true,altaAcidente:'01/03/2026'}),/estabilidade acidentária/i,'erro')!=null);
+  T('F acidentária encerrada',achaSev(comFatos({acidente:true,altaAcidente:'01/03/2025'}),/Estabilidade acidentária/,'ok')!=null);
+  T('F CIPA dentro do ano seguinte',achaSev(comFatos({cipa:true,cipaAte:'01/03/2026'}),/membro da CIPA/i,'erro')!=null);
+  T('F dirigente sindical',achaSev(comFatos({sindical:true,sindicalAte:'01/03/2026'}),/dirigente sindical/i,'erro')!=null);
+  T('F comissão de representantes',achaSev(comFatos({comissao:true,comissaoAte:'01/03/2026'}),/comissão de representantes/i,'erro')!=null);
+  T('F PCD sem substituto',achaSev(comFatos({pcd:true}),/sem substituto/,'erro')!=null);
+  T('F PCD com substituto',achaSev(comFatos({pcd:true,substituto:true}),/empregado com deficiência/i,'ok')!=null);
+  T('F afastado pelo INSS',achaSev(comFatos({afastadoInss:true}),/afastado pelo INSS/,'erro')!=null);
+
+  /* contrato determinado */
+  Ff=comFatos({tipoContrato:'experiencia',fimPrevisto:'07/09/2026'});
+  T('F art. 479 não pago',achaSev(Ff,/Indeniza[çc][ãa]o do art\. 479 não paga/,'erro')!=null);
+  T('F art. 479 = metade dos dias restantes',(function(){var x=acha(Ff,/art\. 479 não paga/);
+    return x&&ok2(x.esp,r2(2215.40/30*41/2),0.02);})(),(acha(Ff,/art\. 479 não paga/)||{}).esp);
+  T('F aviso indevido no prazo determinado',achaSev(Ff,/Aviso prévio em contrato por prazo determinado/,'erro')!=null);
+  T('F multa de 40% indevida no prazo determinado',achaSev(Ff,/Multa de 40% em contrato por prazo determinado/,'erro')!=null);
+  Ff=comFatos({tipoContrato:'experiencia',fimPrevisto:'07/09/2026',assecuratoria:true});
+  T('F cláusula assecuratória afasta o art. 479',acha(Ff,/art\. 479 não paga/)==null);
+  T('F cláusula assecuratória é informada',achaSev(Ff,/cláusula assecuratória/i,'info')!=null);
+  T('F experiência acima de 90 dias',achaSev(comFatos({tipoContrato:'experiencia',fimPrevisto:'31/12/2026'}),/acima de 90 dias/,'erro')!=null);
+  T('F experiência dentro de 90 dias',acha(comFatos({tipoContrato:'experiencia',fimPrevisto:'06/12/2025'}),/acima de 90 dias/)==null);
+  T('F rompimento pelo empregado (art. 480)',achaSev(comFatos({tipoContrato:'determinado',fimPrevisto:'07/09/2026'},'pedido'),/Rompimento antecipado pelo empregado/,'alerta')!=null);
+  T('F intermitente alerta',achaSev(comFatos({tipoContrato:'intermitente'}),/intermitente/i,'alerta')!=null);
+  T('F parcial alerta',achaSev(comFatos({tipoContrato:'parcial'}),/regime parcial/i,'alerta')!=null);
+
+  /* categorias e FGTS */
+  T('F aprendiz recolhe 2%',achaSev(comFatos({categoria:'aprendiz'}),/Alíquota do FGTS da categoria/,'erro')!=null);
+  T('F urbano não acusa alíquota',acha(comFatos({categoria:'urbano'}),/Alíquota do FGTS da categoria/)==null);
+  Ff=comFatos({categoria:'domestico'});
+  T('F doméstico: regime próprio',achaSev(Ff,/regime próprio do FGTS/,'alerta')!=null);
+  T('F doméstico: multa de 40% indevida',achaSev(Ff,/Multa de 40% para empregado doméstico/,'erro')!=null);
+  var dCS=clone(d1); dCS.bases['Contribuição Social 10%']=120; dCS.fatos=fatosPadrao();
+  T('F contribuição de 10% extinta',achaSev(auditar(dCS).findings,/Contribui[çc][ãa]o social de 10% cobrada/,'erro')!=null);
+  T('F contribuição zerada não acusa',acha(comFatos({}),/Contribui[çc][ãa]o social de 10% cobrada/)==null);
+
+  /* jornada e adicionais */
+  Ff=comFatos({bancoHoras:20});
+  T('F banco de horas não pago',achaSev(Ff,/banco de horas não pago/,'erro')!=null);
+  T('F banco de horas com adicional de 50%',(function(){var x=acha(Ff,/banco de horas/);
+    return x&&ok2(x.esp,r2(2215.40/220*20*1.5),0.02);})(),(acha(Ff,/banco de horas/)||{}).esp);
+  T('F insalubridade não integrada',achaSev(comFatos({insalubridade:20}),/Insalubridade não integrada/,'erro')!=null);
+  T('F periculosidade não integrada',achaSev(comFatos({periculosidade:true}),/Periculosidade não integrada/,'erro')!=null);
+  T('F noturno não localizado',achaSev(comFatos({noturno:true}),/Adicional noturno não localizado/,'alerta')!=null);
+  T('F gorjetas informam a regra',achaSev(comFatos({gorjetas:true}),/Gorjetas integram/,'alerta')!=null);
+  var dTrab=clone(d1); dTrab.tipoAviso='trabalhado'; dTrab.fatos=fatosPadrao();
+  T('F aviso trabalhado não informado não vira erro',acha(auditar(dTrab).findings,/sem a redução legal/)==null);
+  dTrab.fatos.avisoReducao='nenhuma';
+  T('F aviso trabalhado sem redução é erro',achaSev(auditar(dTrab).findings,/sem a redução legal/,'erro')!=null);
+  dTrab.fatos.avisoReducao='2h';
+  T('F aviso trabalhado com redução de 2h',achaSev(auditar(dTrab).findings,/Redução do aviso trabalhado/,'ok')!=null);
+  T('F aviso indenizado não cobra redução',acha(comFatos({}),/redução do aviso/i)==null);
+
+  /* procedimento — não informado nunca vira erro */
+  T('F nada respondido: nenhum erro de procedimento',
+    (function(){var F=comFatos({});for(var i=0;i<F.length;i++)
+      if(F[i].sev==='erro'&&/Exame demissional|Baixa na CTPS|Guias do seguro/.test(F[i].titulo))return false;return true;})());
+  T('F nada respondido: nenhuma pendência individual',acha(comFatos({}),/não informado/i)==null);
+  T('F exame demissional respondido "não" é erro',achaSev(comFatos({exameDemissional:'nao'}),/^Exame demissional$/,'erro')!=null);
+  T('F exame demissional respondido "sim" é ok',achaSev(comFatos({exameDemissional:'sim'}),/^Exame demissional$/,'ok')!=null);
+  T('F com o bloco iniciado, o que falta vira pendência',
+    achaSev(comFatos({gestante:true,parto:'01/01/2026'}),/Exame demissional — não informado/,'alerta')!=null);
+  T('F baixa na CTPS respondida "não"',achaSev(comFatos({ctpsEsocial:'nao'}),/^Baixa na CTPS e no eSocial$/,'erro')!=null);
+  T('F guias respondidas "não"',achaSev(comFatos({guiasSD:'nao'}),/^Guias do seguro-desemprego$/,'erro')!=null);
+  T('F guias não cobradas no pedido de demissão',acha(comFatos({guiasSD:'nao'},'pedido'),/Guias do seguro-desemprego/)==null);
+  T('F dispensa coletiva informativa',achaSev(comFatos({dispensaColetiva:true}),/Dispensa coletiva/,'info')!=null);
+  T('F pensão informada e não descontada',achaSev(comFatos({pensaoPerc:30}),/Pensão alimentícia não descontada/,'erro')!=null);
+  T('F dependentes geram alerta de dedução',achaSev(comFatos({dependentes:2}),/Dedução de dependentes/,'alerta')!=null);
+
+  /* índice de legislação */
+  T('L índice tem os 5 blocos',LEIS.length===5,LEIS.length);
+  T('L índice cita mais de 60 normas',(function(){var n=0;for(var i=0;i<LEIS.length;i++)n+=LEIS[i][1].length;return n>60;})(),
+    (function(){var n=0;for(var i=0;i<LEIS.length;i++)n+=LEIS[i][1].length;return n;})());
+  T('L toda norma tem citação, tema e situação',(function(){
+    for(var i=0;i<LEIS.length;i++){var l=LEIS[i][1];
+      for(var j=0;j<l.length;j++) if(l[j].length!==3||!l[j][0]||!l[j][1]||!l[j][2]) return false;}
+    return true;})());
+  T('L limites declarados',LIMITES.length>=6,LIMITES.length);
 
   /* --- convenções coletivas --- */
   var CCT_BACKUP=CCTS.slice();
