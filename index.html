@@ -983,32 +983,51 @@ function ico(n,cls){
 }
 
 /* ------------------------- configuração / tabelas ----------------------- */
+/* Tabelas 2026 conferidas em fonte pública (calcularclt.com.br) e reconciliadas
+   com os documentos reais de calibração. INSS: faixas oficiais 2026; o cálculo
+   TRUNCA cada faixa a centavos — é assim que a folha faz, e só assim os quatro
+   lançamentos reais de INSS batem ao centavo. IRRF: tabela-base 2026 + isenção
+   total até R$ 5.000 (Lei 15.270/2025). A redução gradual de 5.000 a 7.350 NÃO
+   é modelada aqui (ver nota no painel) — por isso o IRRF segue como "atenção". */
 var CFG_PADRAO={
-  inss:[{ate:1621.73,aliq:7.5},{ate:2984.88,aliq:9},{ate:4477.32,aliq:12},{ate:8715.84,aliq:14}],
-  irrf:[{ate:2428.80,aliq:0,ded:0},{ate:2826.65,aliq:7.5,ded:182.16},
-        {ate:3751.05,aliq:15,ded:394.16},{ate:4664.68,aliq:22.5,ded:675.49},
-        {ate:0,aliq:27.5,ded:908.73}],
-  dep:189.59, simp:607.20, isencao:5000,
-  fgts:8, multa:40, horasMes:220, prazoPgto:10
+  inss:[{ate:1621.00,aliq:7.5},{ate:2902.84,aliq:9},{ate:4354.27,aliq:12},{ate:8475.55,aliq:14}],
+  irrf:[{ate:2259.20,aliq:0,ded:0},{ate:2826.65,aliq:7.5,ded:169.44},
+        {ate:3751.05,aliq:15,ded:381.44},{ate:4664.68,aliq:22.5,ded:662.77},
+        {ate:0,aliq:27.5,ded:896.00}],
+  dep:189.59, simp:564.80, isencao:5000,
+  fgts:8, multa:40, horasMes:220, prazoPgto:10,
+  /* muda quando as tabelas oficiais mudam: força a atualização em quem já
+     tem uma versão antiga salva no navegador */
+  tabelaVersao:'2026.1'
 };
 var CFG=carregarCfg();
 
 function carregarCfg(){
   try{
     var s=localStorage.getItem('mxresc_cfg');
-    if(s){var o=JSON.parse(s); for(var k in CFG_PADRAO) if(!(k in o)) o[k]=CFG_PADRAO[k]; return o;}
+    if(s){
+      var o=JSON.parse(s);
+      /* versão salva diferente da atual = tabela desatualizada: começa do
+         padrão novo em vez de manter os números velhos */
+      if(o.tabelaVersao!==CFG_PADRAO.tabelaVersao) return JSON.parse(JSON.stringify(CFG_PADRAO));
+      for(var k in CFG_PADRAO) if(!(k in o)) o[k]=CFG_PADRAO[k];
+      return o;
+    }
   }catch(e){}
   return JSON.parse(JSON.stringify(CFG_PADRAO));
 }
 function salvarCfg(){try{localStorage.setItem('mxresc_cfg',JSON.stringify(CFG));}catch(e){}}
 
+function trunc2(v){return Math.floor(v*100+1e-6)/100;}   /* trunca a centavos */
 function calcInss(base){
   if(base<=0) return 0;
   var t=CFG.inss, tot=0, ant=0;
+  /* a contribuição de cada faixa é truncada a centavos antes de somar; é o que
+     reproduz os lançamentos reais da folha ao centavo */
   for(var i=0;i<t.length;i++){
     var teto=t[i].ate;
-    if(base>teto){ tot+=(teto-ant)*t[i].aliq/100; ant=teto; }
-    else { tot+=(base-ant)*t[i].aliq/100; return r2(tot); }
+    if(base>teto){ tot+=trunc2((teto-ant)*t[i].aliq/100); ant=teto; }
+    else { tot+=trunc2((base-ant)*t[i].aliq/100); return r2(tot); }
   }
   return r2(tot);   // acima do teto
 }
@@ -3368,9 +3387,11 @@ function fecharDrawer(){
 }
 function htmlTabelas(){
   var h='';
-  h+='<div class="aviso"><b>Confira antes de usar.</b> Só a 1ª faixa do INSS (R$ 1.621,73 a 7,5%) foi confirmada '+
-     'a partir dos cálculos reais que serviram de calibração. As demais faixas e a tabela do IRRF são estimativas — '+
-     'por isso as conferências de INSS e IRRF saem como <b>atenção</b>, nunca como erro.</div>';
+  h+='<div class="aviso"><b>Tabelas 2026.</b> INSS e IRRF conferidos em fonte pública e reconciliados com os '+
+     'documentos reais — o INSS reproduz os lançamentos reais ao centavo (faixas oficiais, truncando cada faixa). '+
+     'O IRRF traz a tabela-base 2026 e a isenção total até R$ 5.000 (Lei 15.270/2025), mas a <b>redução gradual '+
+     'entre R$ 5.000 e R$ 7.350 não é modelada</b> — nessa faixa o imposto sai acima do real. Por isso a conferência '+
+     'de INSS/IRRF continua saindo como <b>atenção</b>, nunca como erro. Edite aqui se a legislação mudar.</div>';
 
   h+='<div class="card"><h3>INSS — tabela progressiva</h3>'+
      '<table><thead><tr><th>Até (R$)</th><th class="n">Alíquota %</th><th></th></tr></thead><tbody>';
@@ -4344,7 +4365,26 @@ function autoteste(){
   T('INSS 1.825,29 = 139,95',calcInss(1825.29)===139.95,calcInss(1825.29));
   T('INSS 1.802,19 = 137,87',calcInss(1802.19)===137.87,calcInss(1802.19));
   T('INSS base 0 = 0',calcInss(0)===0);
+  /* tabela oficial 2026 + truncamento por faixa */
+  T('INSS trunca cada faixa (não o total)',calcInss(1825.29)!==139.96,'139.96 seria truncar o total');
+  T('INSS 1ª faixa oficial = R$ 1.621,00',CFG_PADRAO.inss[0].ate===1621.00);
+  T('INSS piso: mínimo a 7,5% = 121,57',calcInss(1621.00)===121.57,calcInss(1621.00));
+  T('INSS 3ª faixa 12%',ok2(calcInss(3000),trunc2(1621*.075)+trunc2((2902.84-1621)*.09)+trunc2((3000-2902.84)*.12),0.001),calcInss(3000));
+  T('INSS teto 2026 = R$ 8.475,55',CFG_PADRAO.inss[3].ate===8475.55);
+  T('INSS acima do teto trava no teto',calcInss(20000)===calcInss(8475.55));
+  T('trunc2 corta a centavos',trunc2(121.575)===121.57&&trunc2(49.7133)===49.71);
+  /* IRRF 2026: isenção total até 5.000 (Lei 15.270/2025) */
   T('IRRF isento abaixo do piso',calcIrrf(1115.93)===0);
+  T('IRRF isento até 5.000',calcIrrf(5000)===0&&calcIrrf(4999.99)===0);
+  T('IRRF tabela-base 2026 acima da isenção',calcIrrf(6000)>0);
+  T('IRRF 1ª faixa isenta oficial = R$ 2.259,20',CFG_PADRAO.irrf[0].ate===2259.20);
+  /* versão de tabela desatualizada é substituída */
+  T('carregarCfg troca tabela de versão antiga',(function(){
+    var bkp=localStorage.getItem('mxresc_cfg');
+    localStorage.setItem('mxresc_cfg',JSON.stringify({inss:[{ate:999,aliq:1}],tabelaVersao:'2020.0'}));
+    var c=carregarCfg();
+    if(bkp!=null) localStorage.setItem('mxresc_cfg',bkp); else localStorage.removeItem('mxresc_cfg');
+    return c.inss[0].ate===1621.00&&c.tabelaVersao==='2026.1';})());
 
   /* --- motivo --- */
   T('motivo pedido antes de sem justa causa',motivoDoTexto('Pedido de demissão SEM justa causa')==='pedido');

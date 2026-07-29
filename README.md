@@ -197,17 +197,25 @@ Sem convenção selecionada, a conferência roda só com a CLT e o laudo diz iss
 O painel **Tabelas & regras** (botão da barra superior) guarda INSS, IRRF e demais parâmetros
 no navegador (localStorage), e traz a matriz do que é devido em cada motivo de desligamento.
 
-A 1ª faixa do INSS (R$ 1.621,73 a 7,5%) foi **deduzida dos quatro lançamentos de INSS dos dois
-casos reais** e bate com todos eles. As faixas seguintes e a tabela do IRRF são estimativas —
-confira a legislação vigente antes de tratar uma divergência de INSS/IRRF como erro. Por isso
-essas duas conferências saem como **atenção**, não como erro.
+As tabelas de 2026 foram conferidas em fonte pública e reconciliadas com os documentos reais:
+
+- **INSS** — faixas oficiais 2026 (R$ 1.621,00 / 2.902,84 / 4.354,27 / 8.475,55 a 7,5/9/12/14%).
+  O cálculo **trunca cada faixa a centavos** — é assim que a folha faz, e só assim os quatro
+  lançamentos reais de INSS batem ao centavo (171,28 / 168,61 / 139,95 / 137,87).
+- **IRRF** — tabela-base 2026 e **isenção total até R$ 5.000** (Lei 15.270/2025). A **redução
+  gradual entre R$ 5.000 e R$ 7.350 não é modelada**: nessa faixa o imposto sai acima do real.
+
+Por isso as conferências de INSS/IRRF continuam saindo como **atenção**, nunca como erro — e
+tudo é editável no painel, com marcador de versão que atualiza quem já tinha uma tabela antiga
+salva no navegador. Confira a legislação vigente antes de tratar uma divergência como erro.
 
 ## Autoteste
 
 - No navegador: `index.html?teste=1` — caixa de resultado no canto inferior direito.
 - No terminal: `node testar.js`
 
-413 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
+424 verificações: utilitários, avos, art. 130, aviso proporcional, tabelas 2026 de INSS/IRRF
+(faixas oficiais, truncamento por faixa, isenção, versionamento), extrator de PDF
 (dicionários aninhados, CMap, larguras de glifo, matriz de texto, montagem de linhas, escolha
 do arquivo certo), parser dos dois
 relatórios reais, leitura do TRCT e a conferência cruzada (identificação, totais, caixa a caixa

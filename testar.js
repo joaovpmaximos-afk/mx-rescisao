@@ -44,7 +44,8 @@ global.location = { search: '' };
 global.localStorage = {
   _d: {},
   getItem: function (k) { return this._d[k] || null; },
-  setItem: function (k, v) { this._d[k] = v; }
+  setItem: function (k, v) { this._d[k] = v; },
+  removeItem: function (k) { delete this._d[k]; }
 };
 blocos.forEach(function (b) { eval(b); });
 
