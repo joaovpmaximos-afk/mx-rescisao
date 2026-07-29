@@ -1,0 +1,2933 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MX Rescisão — conferência de verbas rescisórias</title>
+<style>
+/* ===== tokens ================================================== */
+:root{
+  --brand:#6C5CE7; --brand2:#8E7CFF; --brand-soft:#6C5CE726;
+  --ok:#16C784; --erro:#FF4D6A; --alerta:#FFB020; --info:#4CA8FF;
+  --ok-soft:#16C78422; --erro-soft:#FF4D6A22; --alerta-soft:#FFB02022; --info-soft:#4CA8FF22;
+  --r-xs:6px; --r-sm:10px; --r:14px; --r-lg:20px;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --dur:200ms;
+}
+/* Fundo e cor de texto em cores literais, declarados no :root E numa regra que casa
+   com o body. Há motor que não revalida a propriedade `color` já computada quando as
+   custom properties mudam no :root — a regra descendente permite forçar o recálculo
+   reanexando o body (ver forcarRecalculo no script). */
+:root[data-tema="escuro"] body{background:#080A10;color:#EBEFF8}
+:root[data-tema="claro"]  body{background:#F1F3F9;color:#0D1327}
+:root,:root[data-tema="escuro"]{
+  --bg:#080A10; --sf:#111624; --sf2:#171E30; --sf3:#1E263B;
+  --line:#26304A; --line2:#333F5E;
+  --tx:#EBEFF8; --tx2:#98A3BC; --tx3:#8892AB;
+  /* variantes para uso em TEXTO — as cores acima servem a bordas e fundos */
+  --ok-tx:#16C784; --erro-tx:#FF6B82; --alerta-tx:#FFB020; --info-tx:#4CA8FF; --brand-tx:#A294FF;
+  --sh:0 10px 34px rgba(0,0,0,.5); --sh-sm:0 2px 10px rgba(0,0,0,.35);
+  --grid:#ffffff08;
+  color-scheme:dark;
+  background:#080A10; color:#EBEFF8;
+}
+:root[data-tema="claro"]{
+  --bg:#F1F3F9; --sf:#FFFFFF; --sf2:#F8FAFD; --sf3:#EEF2F9;
+  --line:#DFE5F0; --line2:#C9D2E3;
+  --tx:#0D1327; --tx2:#4E586F; --tx3:#5F6980;
+  --ok-tx:#0B7D53; --erro-tx:#C41E3D; --alerta-tx:#8A5A00; --info-tx:#0B5FBF; --brand-tx:#5B4BD6;
+  --sh:0 8px 28px rgba(15,23,52,.10); --sh-sm:0 1px 4px rgba(15,23,52,.07);
+  --grid:#0d132708;
+  color-scheme:light;
+  background:#F1F3F9; color:#0D1327;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--brand-tx);outline-offset:2px;border-radius:var(--r-xs)}
+::selection{background:var(--brand);color:#fff}
+
+/* ===== topbar ================================================== */
+.topbar{
+  position:sticky;top:0;z-index:60;
+  display:flex;align-items:center;gap:16px;
+  padding:12px 20px;background:var(--sf);border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.mark{
+  width:36px;height:36px;flex:none;border-radius:11px;display:grid;place-items:center;
+  background:linear-gradient(145deg,var(--brand),#4A3BC4);
+  color:#fff;font:800 13px/1 var(--sans);letter-spacing:.5px;
+  box-shadow:0 4px 14px #6C5CE755;
+}
+.brand b{display:block;font-size:15px;letter-spacing:-.2px}
+.brand span{display:block;font-size:11.5px;color:var(--tx3);letter-spacing:.2px}
+.topact{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  min-height:40px;padding:0 15px;border:1px solid var(--line2);
+  background:var(--sf2);color:var(--tx);border-radius:var(--r-sm);
+  font:600 13.5px var(--sans);cursor:pointer;
+  transition:background var(--dur),border-color var(--dur),transform var(--dur);
+}
+.btn:hover{background:var(--sf3);border-color:var(--brand)}
+.btn:active{transform:scale(.975)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 4px 16px #6C5CE744}
+.btn.primary:hover{background:var(--brand2);border-color:var(--brand2)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--tx2)}
+.btn.ghost:hover{background:var(--sf2);color:var(--tx)}
+.btn.icon{width:40px;padding:0;justify-content:center}
+.btn svg{width:17px;height:17px;flex:none}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+
+/* ===== tela de entrada ========================================= */
+.entrada{max-width:820px;margin:0 auto;padding:56px 20px 80px}
+.dropzone{
+  background:var(--sf);border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:40px 36px;box-shadow:var(--sh);
+  background-image:radial-gradient(var(--grid) 1px,transparent 1px);background-size:22px 22px;
+  transition:border-color var(--dur),background-color var(--dur);
+}
+.dropzone.over{border-color:var(--brand);background-color:var(--sf2)}
+.dz-mark{
+  width:52px;height:52px;border-radius:16px;display:grid;place-items:center;margin-bottom:20px;
+  background:var(--brand-soft);color:var(--brand-tx);
+}
+.dz-mark svg{width:26px;height:26px}
+.entrada h1{margin:0 0 8px;font-size:26px;line-height:1.25;letter-spacing:-.5px}
+.entrada .sub{margin:0 0 22px;color:var(--tx2);font-size:14.5px;max-width:56ch}
+.kbd{
+  display:inline-block;padding:1px 7px;border-radius:5px;border:1px solid var(--line2);
+  background:var(--sf3);font:600 12px var(--mono);color:var(--tx)
+}
+textarea{
+  width:100%;min-height:200px;resize:vertical;
+  background:var(--sf2);border:1px solid var(--line);color:var(--tx);
+  border-radius:var(--r);padding:14px 16px;
+  font:12.5px/1.5 var(--mono);
+}
+textarea:focus{outline:none;border-color:var(--brand)}
+textarea::placeholder{color:var(--tx3)}
+.dz-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+
+.exemplos{margin-top:36px}
+.exemplos h2{
+  margin:0 0 14px;font:600 11.5px var(--sans);text-transform:uppercase;
+  letter-spacing:1.2px;color:var(--tx3)
+}
+.ex-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ex{
+  text-align:left;background:var(--sf);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px 18px;cursor:pointer;color:var(--tx);font:inherit;
+  transition:border-color var(--dur),transform var(--dur),box-shadow var(--dur);
+}
+.ex:hover{border-color:var(--brand);transform:translateY(-2px);box-shadow:var(--sh-sm)}
+.ex b{display:block;font-size:14px;margin-bottom:3px}
+.ex span{display:block;font-size:12.5px;color:var(--tx2);line-height:1.45}
+.ex em{display:inline-block;margin-top:9px;font-style:normal;font:600 11px var(--mono);
+  padding:2px 8px;border-radius:99px}
+.ex em.limpo{background:var(--ok-soft);color:var(--ok-tx)}
+.ex em.sujo{background:var(--erro-soft);color:var(--erro-tx)}
+
+/* ===== veredito ================================================ */
+.resultado{padding:0 0 80px}
+.verdict{
+  border-bottom:1px solid var(--line);background:var(--sf);
+  padding:26px 24px 0;
+}
+.verdict-in{max-width:1400px;margin:0 auto;display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.selo{
+  flex:none;display:flex;align-items:center;gap:14px;
+  padding:14px 20px 14px 16px;border-radius:var(--r);border:1px solid;
+}
+.selo.reprovado{background:var(--erro-soft);border-color:#FF4D6A55;color:var(--erro-tx)}
+.selo.atencao{background:var(--alerta-soft);border-color:#FFB02055;color:var(--alerta-tx)}
+.selo.aprovado{background:var(--ok-soft);border-color:#16C78455;color:var(--ok-tx)}
+.selo svg{width:30px;height:30px;flex:none}
+.selo b{display:block;font:800 24px/1.1 var(--sans);letter-spacing:-.6px}
+.selo span{display:block;font-size:12.5px;color:var(--tx2);margin-top:3px}
+
+.impacto{flex:none;padding-left:28px;border-left:1px solid var(--line)}
+.impacto label{display:block;font:600 10.5px var(--sans);text-transform:uppercase;letter-spacing:1.1px;color:var(--tx3);margin-bottom:5px}
+.impacto b{font:700 27px/1.1 var(--mono);letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.impacto small{display:block;color:var(--tx3);font-size:11.5px;margin-top:4px;max-width:26ch}
+
+.quem{flex:1;min-width:240px}
+.quem b{display:block;font-size:16px;letter-spacing:-.2px}
+.quem span{display:block;font-size:13px;color:var(--tx2);margin-top:3px}
+.quem .chips{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
+.chip{
+  font:600 11.5px var(--sans);padding:3px 10px;border-radius:99px;
+  background:var(--sf3);color:var(--tx2);border:1px solid var(--line)
+}
+
+.barra{max-width:1400px;margin:22px auto 0;display:flex;height:6px;border-radius:99px;overflow:hidden;background:var(--sf3)}
+.barra i{display:block;transition:width 400ms ease-out}
+.barra i.e{background:var(--erro)}.barra i.a{background:var(--alerta)}.barra i.o{background:var(--ok)}
+.legenda{max-width:1400px;margin:9px auto 0;display:flex;gap:16px;flex-wrap:wrap;padding-bottom:20px}
+.legenda span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)}
+.legenda i{width:8px;height:8px;border-radius:3px;display:block}
+
+/* ===== timeline ================================================ */
+.timeline{background:var(--sf2);border-bottom:1px solid var(--line);padding:20px 24px}
+.tl-in{max-width:1400px;margin:0 auto;overflow-x:auto;padding-bottom:4px}
+.tl{display:flex;align-items:flex-start;min-width:min-content}
+.tl-no{flex:none;min-width:118px;position:relative;padding-top:22px;text-align:center}
+.tl-no::before{
+  content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);
+  width:11px;height:11px;border-radius:50%;background:var(--tx3);border:2px solid var(--sf2);z-index:2
+}
+.tl-no.mk-ok::before{background:var(--ok)}
+.tl-no.mk-erro::before{background:var(--erro);box-shadow:0 0 0 4px var(--erro-soft)}
+.tl-no.mk-brand::before{background:var(--brand)}
+.tl-no b{display:block;font:600 13px var(--mono);font-variant-numeric:tabular-nums}
+.tl-no span{display:block;font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.7px;margin-top:2px}
+.tl-no em{display:block;font-style:normal;font-size:11px;margin-top:4px;color:var(--tx2)}
+.tl-no.mk-erro em{color:var(--erro-tx)}
+.tl-lig{flex:1;min-width:44px;height:2px;background:var(--line2);margin-top:33px;position:relative}
+.tl-lig.proj{background:repeating-linear-gradient(90deg,var(--brand) 0 6px,transparent 6px 12px)}
+.tl-lig.ruim{background:var(--erro)}
+.tl-lig b{
+  position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+  background:var(--sf2);padding:0 7px;font:600 10.5px var(--sans);color:var(--tx3);white-space:nowrap
+}
+.tl-lig.proj b{color:var(--brand-tx)}
+.tl-lig.ruim b{color:var(--erro-tx)}
+
+/* ===== workspace =============================================== */
+.workspace{
+  max-width:1400px;margin:0 auto;padding:24px;
+  display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-items:start;
+}
+.col h2{
+  margin:0 0 14px;font:600 11.5px var(--sans);text-transform:uppercase;
+  letter-spacing:1.2px;color:var(--tx3);display:flex;align-items:center;gap:9px
+}
+.col h2 b{color:var(--tx2);font-weight:600}
+
+.filtros{display:flex;gap:4px;background:var(--sf2);border:1px solid var(--line);
+  padding:4px;border-radius:var(--r-sm);margin-bottom:16px;flex-wrap:wrap}
+.filtros button{
+  flex:1;min-width:88px;min-height:34px;border:0;background:transparent;color:var(--tx2);
+  border-radius:var(--r-xs);font:600 12.5px var(--sans);cursor:pointer;
+  transition:background var(--dur),color var(--dur)
+}
+.filtros button:hover{color:var(--tx)}
+.filtros button[aria-pressed="true"]{background:var(--sf3);color:var(--tx);box-shadow:var(--sh-sm)}
+
+.grupo{margin:26px 0 12px;display:flex;align-items:center;gap:10px}
+.grupo:first-child{margin-top:0}
+.grupo b{font:700 12.5px var(--sans);letter-spacing:.3px}
+.grupo i{flex:1;height:1px;background:var(--line);display:block}
+.grupo em{font-style:normal;font:600 11px var(--mono);color:var(--tx3)}
+
+.find{
+  background:var(--sf);border:1px solid var(--line);border-left:3px solid var(--line2);
+  border-radius:var(--r-sm);padding:14px 16px;margin-bottom:10px;
+  transition:border-color var(--dur),box-shadow var(--dur),transform var(--dur);
+}
+.find[data-rubs]{cursor:pointer}
+.find[data-rubs]:hover{box-shadow:var(--sh-sm);transform:translateX(2px)}
+.find.sel{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.find.erro{border-left-color:var(--erro)}
+.find.alerta{border-left-color:var(--alerta)}
+.find.ok{border-left-color:var(--ok)}
+.find.info{border-left-color:var(--info)}
+.find-h{display:flex;gap:10px;align-items:flex-start}
+.sev{
+  flex:none;width:20px;height:20px;border-radius:6px;display:grid;place-items:center;margin-top:1px
+}
+.sev svg{width:13px;height:13px}
+.sev.erro{background:var(--erro-soft);color:var(--erro-tx)}
+.sev.alerta{background:var(--alerta-soft);color:var(--alerta-tx)}
+.sev.ok{background:var(--ok-soft);color:var(--ok-tx)}
+.sev.info{background:var(--info-soft);color:var(--info-tx)}
+.find h3{margin:0;font:600 14.5px/1.4 var(--sans);letter-spacing:-.1px;flex:1}
+.find p{margin:7px 0 0;color:var(--tx2);font-size:13.5px}
+.find p.fix{color:var(--tx);background:var(--sf2);border-radius:var(--r-xs);padding:8px 11px;margin-top:10px;font-size:13px}
+.find p.fix b{color:var(--brand-tx)}
+.lei{margin-top:10px;padding-top:9px;border-top:1px dashed var(--line);font-size:11.5px;color:var(--tx3)}
+
+.cmp{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:var(--r-xs);overflow:hidden;margin-top:11px}
+.cmp div{background:var(--sf2);padding:8px 11px}
+.cmp label{display:block;font:600 9.5px var(--sans);text-transform:uppercase;letter-spacing:1px;color:var(--tx3);margin-bottom:3px}
+.cmp b{font:600 15px var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+.cmp .dif b{color:var(--ok-tx)}
+.cmp .dif.neg b{color:var(--erro-tx)}
+
+/* coluna do cálculo */
+.col-calc{position:sticky;top:80px;max-height:calc(100vh - 104px);overflow-y:auto;padding-right:2px}
+.card{background:var(--sf);border:1px solid var(--line);border-radius:var(--r);margin-bottom:14px;overflow:hidden}
+.card>h3{
+  margin:0;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--sf2);
+  font:600 12px var(--sans);text-transform:uppercase;letter-spacing:1px;color:var(--tx2)
+}
+.card-body{padding:14px 16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{
+  position:sticky;top:0;background:var(--sf2);text-align:left;
+  font:600 10px var(--sans);text-transform:uppercase;letter-spacing:.9px;color:var(--tx3);
+  padding:8px 10px;border-bottom:1px solid var(--line);z-index:1
+}
+td{padding:7px 10px;border-bottom:1px solid var(--line);color:var(--tx2)}
+td.nm{color:var(--tx);font-size:12.5px}
+th.n,td.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+tbody tr{transition:background var(--dur)}
+tbody tr.hl{background:var(--brand-soft)}
+tbody tr.hl td{color:var(--tx)}
+tr.tot td{border-top:2px solid var(--line2);border-bottom:0;font-weight:700;color:var(--tx);
+  font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr.tot td:first-child{font-family:var(--sans)}
+.cod{font:11px var(--mono);color:var(--tx3)}
+
+.kvs{display:grid;grid-template-columns:1fr 1fr;gap:11px 16px}
+.kv label{display:block;font:600 9.5px var(--sans);text-transform:uppercase;letter-spacing:1px;color:var(--tx3);margin-bottom:2px}
+.kv b{font-size:13.5px;font-weight:600}
+.kv b.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+details.ajustes{border-top:1px solid var(--line)}
+details.ajustes>summary{
+  padding:11px 16px;cursor:pointer;font:600 12.5px var(--sans);color:var(--tx2);
+  list-style:none;display:flex;align-items:center;gap:8px
+}
+details.ajustes>summary::-webkit-details-marker{display:none}
+details.ajustes>summary::before{content:"+";font:700 15px var(--mono);color:var(--brand-tx)}
+details.ajustes[open]>summary::before{content:"–"}
+details.ajustes>summary:hover{color:var(--tx)}
+.form{padding:0 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.form label{display:block;font:600 9.5px var(--sans);text-transform:uppercase;letter-spacing:1px;color:var(--tx3);margin-bottom:4px}
+input,select{
+  width:100%;min-height:38px;background:var(--sf2);border:1px solid var(--line);color:var(--tx);
+  border-radius:var(--r-xs);padding:0 10px;font:13.5px var(--sans)
+}
+input{font-family:var(--mono);font-variant-numeric:tabular-nums}
+input:focus,select:focus{outline:none;border-color:var(--brand)}
+.form .full{grid-column:1/-1}
+
+/* ===== drawer de tabelas ======================================= */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80;backdrop-filter:blur(2px)}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100%;z-index:90;
+  background:var(--sf);border-left:1px solid var(--line);box-shadow:var(--sh);
+  display:flex;flex-direction:column;
+}
+.drawer-h{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.drawer-h b{font-size:16px;letter-spacing:-.2px;flex:1}
+.drawer-b{flex:1;overflow-y:auto;padding:20px}
+.aviso{
+  border-radius:var(--r-sm);padding:11px 13px;font-size:12.5px;margin-bottom:16px;line-height:1.5;
+  background:var(--alerta-soft);border:1px solid #FFB02044;color:var(--tx)
+}
+.aviso b{color:var(--alerta-tx)}
+.msg{border-radius:var(--r-sm);padding:11px 13px;font-size:13.5px;margin-top:14px}
+.msg.err{background:var(--erro-soft);border:1px solid #FF4D6A44}
+.msg.ok{background:var(--ok-soft);border:1px solid #16C78444}
+
+.vazio{padding:34px 20px;text-align:center;color:var(--tx3);font-size:13.5px}
+
+/* ===== responsivo ============================================== */
+@media(max-width:1080px){
+  .workspace{grid-template-columns:1fr}
+  .col-calc{position:static;max-height:none}
+}
+@media(max-width:720px){
+  .topbar{padding:10px 14px}
+  .brand span{display:none}
+  .entrada{padding:28px 14px 60px}
+  .dropzone{padding:26px 20px;border-radius:var(--r)}
+  .entrada h1{font-size:21px}
+  .ex-grid{grid-template-columns:1fr}
+  .verdict{padding:20px 14px 0}
+  .verdict-in{gap:18px}
+  .impacto{padding-left:0;border-left:0;border-top:1px solid var(--line);padding-top:14px;width:100%}
+  .timeline{padding:16px 14px}
+  .workspace{padding:18px 14px}
+  .cmp{grid-template-columns:1fr}
+  .form{grid-template-columns:1fr}
+  .kvs{grid-template-columns:1fr}
+  /* corpo de leitura maior no celular */
+  .find h3{font-size:16px}
+  .find p{font-size:15px}
+  .find p.fix{font-size:14.5px}
+  .lei{font-size:12.5px}
+  .cmp label{font-size:10.5px}
+  .cmp b{font-size:17px}
+}
+/* na barra estreita as ações viram só ícone (o aria-label mantém o nome) */
+@media(max-width:600px){
+  .topact .rot{display:none}
+  .topact .btn{width:44px;padding:0;justify-content:center}
+}
+/* alvos de toque de 44px e fontes de 16px nos campos (abaixo disso o iOS dá zoom ao focar) */
+@media(max-width:720px),(pointer:coarse){
+  .btn{min-height:44px;flex:none}
+  .btn.icon{width:44px}
+  .filtros button{min-height:44px}
+  input,select{min-height:44px;font-size:16px}
+  textarea{font-size:15px}
+  details.ajustes>summary{padding:14px 16px}
+  .ex{padding:18px}
+  /* a caixa de seleção é pequena por natureza: quem recebe o toque é o rótulo inteiro */
+  .form label.opcao{min-height:44px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ===== impressão =============================================== */
+@media print{
+  :root,:root[data-tema="escuro"],:root[data-tema="claro"]{
+        --bg:#fff;--sf:#fff;--sf2:#fff;--sf3:#fff;--line:#d4d9e4;--line2:#b9c1d2;
+        --tx:#000;--tx2:#333;--tx3:#666;--sh:none;--sh-sm:none;--grid:transparent;
+        background:#fff;color:#000}
+  :root[data-tema="escuro"] body,:root[data-tema="claro"] body{background:#fff;color:#000}
+  .topbar,.filtros,.entrada,.drawer,.scrim,.btn,details.ajustes{display:none!important}
+  .col-calc{position:static;max-height:none;overflow:visible}
+  .workspace{grid-template-columns:1fr;padding:0;gap:0}
+  .find,.card,.selo{break-inside:avoid;box-shadow:none}
+  .verdict,.timeline{padding:0 0 16px;border-bottom:1px solid #d4d9e4}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="mark" aria-hidden="true">MX</div>
+    <div><b>Rescisão</b><span>conferência de verbas rescisórias</span></div>
+  </div>
+  <div class="topact">
+    <button class="btn ghost" id="btNovo" hidden aria-label="Nova conferência"><span class="rot">Nova conferência</span></button>
+    <button class="btn" id="btConvencoes" aria-label="Convenções coletivas"><span class="rot">Convenções</span></button>
+    <button class="btn" id="btTabelas" aria-label="Tabelas e regras"><span class="rot">Tabelas</span></button>
+    <button class="btn icon" id="btPrint" title="Imprimir laudo" aria-label="Imprimir laudo" hidden></button>
+    <button class="btn icon" id="btTema" title="Alternar tema" aria-label="Alternar tema claro e escuro"></button>
+  </div>
+</header>
+
+<!-- ============ ESTADO 1: ENTRADA ============ -->
+<main class="entrada" id="telaEntrada">
+  <div class="dropzone" id="drop">
+    <div class="dz-mark" aria-hidden="true"></div>
+    <h1>Cole o relatório da rescisão.<br>Eu recalculo tudo do zero.</h1>
+    <p class="sub">Abra o <b>Relatório Analítico do Cálculo de Rescisão</b> em PDF, selecione tudo e cole aqui
+      — <span class="kbd">Ctrl</span> <span class="kbd">V</span> funciona em qualquer ponto da página.
+      Também aceita arquivo <code>.txt</code> arrastado. Nada sai deste computador.</p>
+    <textarea id="txt" aria-label="Texto do relatório analítico"
+      placeholder="RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO&#10;Empregado: ...&#10;Data admissão: ...  Data demissão: ...&#10;9180  SALDO DE SALARIO DIAS   28,00   2.067,71&#10;..."></textarea>
+    <div class="dz-actions">
+      <button class="btn primary" id="bLer">Conferir rescisão</button>
+      <button class="btn ghost" id="bLimpar">Limpar</button>
+    </div>
+    <div id="msg1"></div>
+  </div>
+
+  <div class="exemplos">
+    <h2>ou abra um caso já conferido</h2>
+    <div class="ex-grid">
+      <button class="ex" id="bEx1">
+        <b>Dispensa sem justa causa</b>
+        <span>Aviso indenizado, 11 meses de casa, médias de horas extras e acúmulo de função.</span>
+        <em class="limpo">cálculo correto</em>
+      </button>
+      <button class="ex" id="bEx2">
+        <b>Pedido de demissão</b>
+        <span>Aviso não cumprido descontado, férias vencidas + proporcionais, adiantamento.</span>
+        <em class="sujo">tem 1 erro</em>
+      </button>
+    </div>
+  </div>
+</main>
+
+<!-- ============ ESTADO 2: RESULTADO ============ -->
+<main class="resultado" id="telaResultado" hidden>
+  <section class="verdict" id="verdict"></section>
+  <section class="timeline" id="timeline"></section>
+  <div class="workspace">
+    <div class="col">
+      <h2>Achados <b id="contAchados"></b></h2>
+      <div class="filtros" id="filtros" role="group" aria-label="Filtrar achados">
+        <button data-f="prob" aria-pressed="true">Erros e alertas</button>
+        <button data-f="erro" aria-pressed="false">Só erros</button>
+        <button data-f="tudo" aria-pressed="false">Tudo</button>
+      </div>
+      <div id="achBody"></div>
+    </div>
+    <aside class="col col-calc">
+      <h2>O cálculo conferido</h2>
+      <div id="confBody"></div>
+    </aside>
+  </div>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden role="dialog" aria-modal="true" aria-label="Tabelas e regras">
+  <div class="drawer-h">
+    <b id="drawerTitulo">Tabelas &amp; regras</b>
+    <button class="btn icon" id="btFecharDrawer" aria-label="Fechar"></button>
+  </div>
+  <div class="drawer-b" id="drawerBody"></div>
+</aside>
+
+<script>
+/* =========================================================================
+   MX RESCISÃO — conferidor de rescisão trabalhista
+   HTML único, ES5, offline. Autoteste: abrir com ?teste=1
+   ========================================================================= */
+(function(){
+"use strict";
+
+/* ---------------------------- utilitários ------------------------------ */
+function $(s){return document.querySelector(s);}
+function $$(s){return [].slice.call(document.querySelectorAll(s));}
+function el(t,c,h){var e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function nb(s){                       // "1.234,56" -> 1234.56
+  if(s==null) return 0;
+  if(typeof s==='number') return s;
+  s=String(s).replace(/\s/g,'');
+  if(!s) return 0;
+  s=s.replace(/\./g,'').replace(',','.');
+  var v=parseFloat(s);
+  return isNaN(v)?0:v;
+}
+function nh(s){                       // "38:36" -> 38.6 ; "7,00" -> 7
+  if(s==null) return 0;
+  s=String(s).trim();
+  if(/:/.test(s)){var p=s.split(':');return (+p[0])+((+p[1])/60);}
+  return nb(s);
+}
+function mo(v){                       // 1234.5 -> "1.234,50"
+  if(v==null||isNaN(v)) return '—';
+  var n=Math.round(Math.abs(v)*100)/100, s=n.toFixed(2).split('.');
+  return (v<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+s[1];
+}
+function r2(v){return Math.round(v*100)/100;}
+function ok2(a,b,t){return Math.abs(r2(a)-r2(b))<=(t==null?0.02:t);}
+function plural(n,um,mu){return n+' '+(n===1?um:mu);}
+
+/* datas em UTC para não sofrer com fuso */
+function pd(s){
+  if(!s) return null;
+  if(s instanceof Date) return s;
+  var m=/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(String(s));
+  if(!m) return null;
+  var d=new Date(Date.UTC(+m[3],+m[2]-1,+m[1]));
+  return isNaN(d.getTime())?null:d;
+}
+function fd(d){
+  if(!d) return '—';
+  function p(n){return (n<10?'0':'')+n;}
+  return p(d.getUTCDate())+'/'+p(d.getUTCMonth()+1)+'/'+d.getUTCFullYear();
+}
+function addDias(d,n){return new Date(d.getTime()+n*86400000);}
+function addMeses(d,n){
+  var y=d.getUTCFullYear(), m=d.getUTCMonth()+n, dia=d.getUTCDate();
+  var ult=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+  return new Date(Date.UTC(y,m,Math.min(dia,ult)));
+}
+function difDias(a,b){return Math.round((b-a)/86400000);}
+function ultimoDiaMes(y,m){return new Date(Date.UTC(y,m+1,0)).getUTCDate();}
+
+/* ------------------------------- ícones -------------------------------- */
+var SVG={
+  erro:'<path d="M12 8v5M12 16.5v.01M10.3 3.9 2.4 17.4A2 2 0 0 0 4.1 20.4h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
+  alerta:'<path d="M12 8v5M12 16.5v.01"/><circle cx="12" cy="12" r="9"/>',
+  ok:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/>',
+  colar:'<rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 13h6M9 17h4"/>',
+  sol:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  lua:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
+  print:'<path d="M6 9V3h12v6M6 18H4v-6h16v6h-2"/><rect x="8" y="15" width="8" height="6" rx="1"/>',
+  fechar:'<path d="M6 6l12 12M18 6 6 18"/>',
+  escudo:'<path d="M12 3 4.5 6v6c0 4.4 3.1 8.2 7.5 9 4.4-.8 7.5-4.6 7.5-9V6L12 3Z"/><path d="m9 12 2 2 4-4"/>',
+  voltar:'<path d="M19 12H5M12 19l-7-7 7-7"/>',
+  ajustes:'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h10M18 18h2"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>',
+  convencao:'<path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v6h6M9 13h6M9 17h4"/>'
+};
+function ico(n,cls){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '+
+         'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'+(cls?' class="'+cls+'"':'')+'>'+
+         (SVG[n]||'')+'</svg>';
+}
+
+/* ------------------------- configuração / tabelas ----------------------- */
+var CFG_PADRAO={
+  inss:[{ate:1621.73,aliq:7.5},{ate:2984.88,aliq:9},{ate:4477.32,aliq:12},{ate:8715.84,aliq:14}],
+  irrf:[{ate:2428.80,aliq:0,ded:0},{ate:2826.65,aliq:7.5,ded:182.16},
+        {ate:3751.05,aliq:15,ded:394.16},{ate:4664.68,aliq:22.5,ded:675.49},
+        {ate:0,aliq:27.5,ded:908.73}],
+  dep:189.59, simp:607.20, isencao:5000,
+  fgts:8, multa:40, horasMes:220, prazoPgto:10
+};
+var CFG=carregarCfg();
+
+function carregarCfg(){
+  try{
+    var s=localStorage.getItem('mxresc_cfg');
+    if(s){var o=JSON.parse(s); for(var k in CFG_PADRAO) if(!(k in o)) o[k]=CFG_PADRAO[k]; return o;}
+  }catch(e){}
+  return JSON.parse(JSON.stringify(CFG_PADRAO));
+}
+function salvarCfg(){try{localStorage.setItem('mxresc_cfg',JSON.stringify(CFG));}catch(e){}}
+
+function calcInss(base){
+  if(base<=0) return 0;
+  var t=CFG.inss, tot=0, ant=0;
+  for(var i=0;i<t.length;i++){
+    var teto=t[i].ate;
+    if(base>teto){ tot+=(teto-ant)*t[i].aliq/100; ant=teto; }
+    else { tot+=(base-ant)*t[i].aliq/100; return r2(tot); }
+  }
+  return r2(tot);   // acima do teto
+}
+function calcIrrf(base){
+  if(base<=0) return 0;
+  if(CFG.isencao>0 && base<=CFG.isencao) return 0;
+  var t=CFG.irrf;
+  for(var i=0;i<t.length;i++){
+    if(t[i].ate===0 || base<=t[i].ate) return Math.max(0,r2(base*t[i].aliq/100-t[i].ded));
+  }
+  return 0;
+}
+
+/* ==================== convenções coletivas (CCT / ACT) ==================
+   Cadastro local. Cláusulas estruturadas são conferidas automaticamente;
+   as cláusulas livres entram no laudo como checklist de conferência manual. */
+var CCTS=carregarCcts();
+
+function cctVazia(){
+  return {
+    id:'', nome:'', sindicato:'', categoria:'', abrangencia:'',
+    vigIni:'', vigFim:'', dataBase:'',
+    pisos:[{funcao:'',valor:0}],
+    aviso:{diasMin:0, idadeMin:0, idadeDias:0, anosMin:0, anosDias:0, vedaDesconto:false},
+    pagamento:{prazoDias:0, multaTipo:'nenhuma', multaValor:0, multaCumulativa:true},
+    dataBaseIndeniz:true,
+    homologacao:{obrigatoria:false, mesesMin:12, local:'sindicato'},
+    assistencial:{prevista:false, perc:0, teto:0, incideRescisao:false},
+    adicionais:{he:0, noturno:0, insalub:0, pericul:0},
+    estabilidade:{preAposMeses:0, preAposAnosCasa:0},
+    beneficios:{descontoAlimMaxPerc:0},
+    livres:[],
+    obs:''
+  };
+}
+function carregarCcts(){
+  try{
+    var s=localStorage.getItem('mxresc_ccts');
+    if(s){ var a=JSON.parse(s); if(a&&a.length) return a.map(normalizarCct); }
+  }catch(e){}
+  return [];
+}
+function salvarCcts(){try{localStorage.setItem('mxresc_ccts',JSON.stringify(CCTS));}catch(e){}}
+/* completa campos ausentes — o cadastro evolui entre versões */
+function normalizarCct(o){
+  var base=cctVazia();
+  function merge(alvo,src){
+    for(var k in alvo){
+      if(src==null||src[k]==null) continue;
+      if(Object.prototype.toString.call(alvo[k])==='[object Object]') merge(alvo[k],src[k]);
+      else alvo[k]=src[k];
+    }
+  }
+  merge(base,o);
+  if(o&&o.pisos&&o.pisos.length) base.pisos=o.pisos;
+  if(o&&o.livres&&o.livres.length) base.livres=o.livres;
+  if(!base.id) base.id='cct'+Math.abs(hashTxt(base.nome+base.vigIni+base.sindicato));
+  return base;
+}
+function hashTxt(s){var h=0;s=String(s);for(var i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;}return h;}
+function novoId(){
+  var n=1, ids={};
+  for(var i=0;i<CCTS.length;i++) ids[CCTS[i].id]=1;
+  while(ids['cct'+n]) n++;
+  return 'cct'+n;
+}
+function cctPorId(id){
+  for(var i=0;i<CCTS.length;i++) if(CCTS[i].id===id) return CCTS[i];
+  return null;
+}
+/* vigência cobre a data? */
+function cctVigente(c,data){
+  if(!data) return true;
+  var i=pd(c.vigIni), f=pd(c.vigFim);
+  if(i&&data<i) return false;
+  if(f&&data>f) return false;
+  return true;
+}
+/* piso da função (casamento por trecho do cargo) ou o piso geral */
+function pisoDaFuncao(c,cargo){
+  if(!c||!c.pisos) return 0;
+  var geral=0, cg=(cargo||'').toUpperCase();
+  for(var i=0;i<c.pisos.length;i++){
+    var p=c.pisos[i], f=(p.funcao||'').toUpperCase().trim();
+    if(!p.valor) continue;
+    if(!f) { if(!geral) geral=p.valor; continue; }
+    if(cg&&cg.indexOf(f)>=0) return p.valor;
+  }
+  return geral;
+}
+function idadeEm(nasc,data){
+  if(!nasc||!data) return null;
+  var a=data.getUTCFullYear()-nasc.getUTCFullYear(), m=data.getUTCMonth()-nasc.getUTCMonth();
+  if(m<0||(m===0&&data.getUTCDate()<nasc.getUTCDate())) a--;
+  return a;
+}
+/* ocorrência da data-base ("dd/mm") relevante para um término */
+function dataBaseProxima(ddmm,termino){
+  var m=/^(\d{1,2})\/(\d{1,2})$/.exec((ddmm||'').trim());
+  if(!m||!termino) return null;
+  var dia=+m[1], mes=+m[2]-1, y=termino.getUTCFullYear();
+  var cand=[new Date(Date.UTC(y,mes,dia)), new Date(Date.UTC(y+1,mes,dia))];
+  for(var i=0;i<cand.length;i++){
+    var ini=addDias(cand[i],-30), fim=addDias(cand[i],-1);
+    if(termino>=ini&&termino<=fim) return cand[i];
+  }
+  return null;
+}
+
+/* ------------------------------ regras ---------------------------------- */
+var MOTIVOS={
+  sjc:        {nome:'Dispensa sem justa causa',        aviso:'empregador', d13:1, feriasProp:1, feriasVenc:1, projeta:1, multa:40, saque:'100%', seguro:1},
+  indireta:   {nome:'Rescisão indireta',               aviso:'empregador', d13:1, feriasProp:1, feriasVenc:1, projeta:1, multa:40, saque:'100%', seguro:1},
+  pedido:     {nome:'Pedido de demissão',              aviso:'empregado',  d13:1, feriasProp:1, feriasVenc:1, projeta:0, multa:0,  saque:'não',  seguro:0},
+  acordo:     {nome:'Acordo (art. 484-A)',             aviso:'metade',     d13:1, feriasProp:1, feriasVenc:1, projeta:1, multa:20, saque:'80%',  seguro:0},
+  justacausa: {nome:'Dispensa por justa causa',        aviso:'nenhum',     d13:0, feriasProp:0, feriasVenc:1, projeta:0, multa:0,  saque:'não',  seguro:0},
+  termino:    {nome:'Término de contrato determinado', aviso:'nenhum',     d13:1, feriasProp:1, feriasVenc:1, projeta:0, multa:0,  saque:'100%', seguro:0},
+  morte:      {nome:'Falecimento do empregado',        aviso:'nenhum',     d13:1, feriasProp:1, feriasVenc:1, projeta:0, multa:0,  saque:'100%', seguro:0},
+  aposentadoria:{nome:'Aposentadoria',                 aviso:'nenhum',     d13:1, feriasProp:1, feriasVenc:1, projeta:0, multa:0,  saque:'100%', seguro:0}
+};
+var AVISO_LABEL={indenizado:'Aviso indenizado',trabalhado:'Aviso trabalhado',
+  reavido:'Aviso não cumprido (descontado)',dispensado:'Aviso dispensado',nenhum:'Sem aviso'};
+
+function motivoDoTexto(s){
+  s=(s||'').toLowerCase();
+  if(/pedido de demiss|pedido do empregad|demiss[aã]o volunt/.test(s)) return 'pedido';
+  if(/indireta/.test(s)) return 'indireta';
+  if(/acordo|484/.test(s)) return 'acordo';
+  if(/com justa causa|por justa causa/.test(s)) return 'justacausa';
+  if(/t[eé]rmino|prazo determinado|experi[eê]ncia|contrato determinado/.test(s)) return 'termino';
+  if(/falecimento|morte|[óo]bito/.test(s)) return 'morte';
+  if(/aposentadoria/.test(s)) return 'aposentadoria';
+  if(/sem justa causa|dispensa|despedida|demitido/.test(s)) return 'sjc';
+  return 'sjc';
+}
+
+/* dias de aviso prévio devidos — art. 1º Lei 12.506/2011 (só a favor do empregado).
+   A CCT pode ampliar (piso de dias, adicional por idade ou tempo de casa) mas nunca reduzir. */
+function diasAvisoDevidos(admissao, dataAviso, motivo, cct, nascimento){
+  if(!admissao||!dataAviso) return 30;
+  var m=MOTIVOS[motivo]||MOTIVOS.sjc;
+  if(m.aviso!=='empregador' && m.aviso!=='metade') return 30;   // empregado deve sempre 30
+  var anos=0, marco=addMeses(admissao,12);
+  while(marco<=dataAviso){ anos++; marco=addMeses(marco,12); }
+  var d=30+3*anos;
+  if(d>90) d=90;                                                // teto só da regra legal
+  if(cct&&cct.aviso){
+    var a=cct.aviso, cctDias=30;
+    if(a.idadeDias&&a.idadeMin){ var id=idadeEm(nascimento,dataAviso); if(id!=null&&id>=a.idadeMin) cctDias+=a.idadeDias; }
+    if(a.anosDias&&a.anosMin&&anos>=a.anosMin) cctDias+=a.anosDias;
+    if(a.diasMin&&a.diasMin>cctDias) cctDias=a.diasMin;
+    if(cctDias>d) d=cctDias;
+  }
+  return d;
+}
+/* prazo de pagamento: 10 dias corridos do art. 477, §6º — a CCT pode encurtar */
+function prazoPagamento(cct){
+  var p=CFG.prazoPgto;
+  if(cct&&cct.pagamento&&cct.pagamento.prazoDias>0&&cct.pagamento.prazoDias<p) p=cct.pagamento.prazoDias;
+  return p;
+}
+
+/* avos de 13º — meses com 15 dias ou mais, no ano do término */
+function avos13(admissao, fim){
+  if(!fim) return 0;
+  var ini=new Date(Date.UTC(fim.getUTCFullYear(),0,1));
+  if(admissao && admissao>ini) ini=admissao;
+  if(ini>fim) return 0;
+  var c=0;
+  for(var m=ini.getUTCMonth(); m<=fim.getUTCMonth(); m++){
+    var d1=(m===ini.getUTCMonth())?ini.getUTCDate():1;
+    var d2=(m===fim.getUTCMonth())?fim.getUTCDate():ultimoDiaMes(fim.getUTCFullYear(),m);
+    if(d2-d1+1>=15) c++;
+  }
+  return c;
+}
+
+/* avos de férias — períodos mensais do aquisitivo, fração >=15 dias conta */
+function avosFerias(inicio, fim){
+  if(!inicio||!fim||fim<inicio) return 0;
+  var c=0, cur=new Date(inicio.getTime()), guard=0;
+  while(guard++<40){
+    var prox=addMeses(cur,1);
+    if(prox<=addDias(fim,1)){ c++; cur=prox; if(c>=12) break; }
+    else { if(difDias(cur,fim)+1>=15) c++; break; }
+  }
+  return Math.min(c,12);
+}
+
+/* dias de férias a que tem direito conforme faltas — art. 130 CLT */
+function diasFeriasPorFaltas(f){
+  f=f||0;
+  if(f<=5) return 30;
+  if(f<=14) return 24;
+  if(f<=23) return 18;
+  if(f<=32) return 12;
+  return 0;
+}
+
+/* início do período aquisitivo em aberto (o último) */
+function inicioAquisitivoAtual(admissao, fim){
+  if(!admissao||!fim) return null;
+  var cur=new Date(admissao.getTime()), guard=0;
+  while(guard++<60){
+    var prox=addMeses(cur,12);
+    if(prox<=fim) cur=prox; else break;
+  }
+  return cur;
+}
+
+/* --------------------------- parser do relatório ------------------------ */
+var GRUPOS_D=['descontos','inss','irrf','i.r.r.f','fechamento','desconto adiantamento',
+  'falta integral','falta parcial','desc. vale transporte','desc vale transporte',
+  'pens[aã]o','contribui[cç][aã]o','sindicato','conv[eê]nio','empr[eé]stimo','plano de sa[uú]de',
+  'adiantamentos','descontos diversos','vale transporte'];
+var GRUPOS_P=['sal[aá]rios','outros proventos','horas extras','13[oº] sal[aá]rio','13[oº] rescis[aã]o',
+  'f[eé]rias rescis[aã]o','f[eé]rias','aviso pr[eé]vio','adicionais','comiss[oõ]es','proventos',
+  'proventos diversos','indeniza[cç][oõ]es','verbas rescis[oó]rias'];
+
+function ehGrupo(l,lista){
+  var s=l.toLowerCase().replace(/\s+/g,' ').trim();
+  for(var i=0;i<lista.length;i++) if(new RegExp('^'+lista[i]+'$').test(s)) return true;
+  return false;
+}
+
+function parseAnalitico(txt){
+  var d={rubricas:[],bases:{},ferias:[],erros:[]};
+  if(!txt || !txt.replace(/\s/g,'')) { d.erros.push('Texto vazio.'); return d; }
+  var linhas=txt.replace(/\r/g,'').split('\n'), tipo='P', grupo='';
+
+  function acha(re,src){var m=re.exec(src);return m?m[1]:null;}
+  var todo=txt.replace(/\r/g,'');
+
+  d.empresa = (acha(/Empresa:\s*(.+)/,todo)||'').replace(/\s+P[áa]gina:.*$/,'').trim();
+  d.cnpj    = acha(/CNPJ:\s*([\d.\/-]{14,20})/,todo);
+  var emp   = acha(/Empregado:\s*(.+)/,todo)||'';
+  emp = emp.replace(/\s+CTPS:.*$/,'').trim();
+  var mm=/^(\d+)\s*-\s*(.+)$/.exec(emp);
+  d.matricula = mm?mm[1]:''; d.nome = mm?mm[2].trim():emp;
+  d.cargo   = (acha(/Cargo:\s*(.+)/,todo)||'').replace(/\s+PIS:.*$/,'').replace(/\s+Data nascto:.*$/,'').trim();
+  d.salario = nb(acha(/Sal[aá]rio:\s*([\d.,]+)/,todo));
+  d.nascimento = pd(acha(/Data nascto:\s*(\d{2}\/\d{2}\/\d{4})/,todo));
+  d.admissao   = pd(acha(/Data admiss[aã]o:\s*(\d{2}\/\d{2}\/\d{4})/,todo));
+  d.dataAviso  = pd(acha(/Data aviso:\s*(\d{2}\/\d{2}\/\d{4})/,todo));
+  d.demissao   = pd(acha(/Data demiss[aã]o:\s*(\d{2}\/\d{2}\/\d{4})/,todo));
+  d.projecao   = pd(acha(/Data proje[cç][aã]o:\s*(\d{2}\/\d{2}\/\d{4})/,todo));
+  d.pagamento  = pd(acha(/Data pagamento:\s*(\d{2}\/\d{2}\/\d{4})/,todo));
+  d.motivoTxt  = (acha(/Motivo demiss[aã]o:\s*(.+)/,todo)||'').replace(/\s+Data pagamento:.*$/,'').trim();
+  d.motivo     = motivoDoTexto(d.motivoTxt);
+  var ai = acha(/Aviso Indenizado:\s*(SIM|N[AÃ]O)/i,todo);
+  d.avisoIndenizadoFlag = ai ? /sim/i.test(ai) : null;
+
+  for(var i=0;i<linhas.length;i++){
+    var l=linhas[i].replace(/\s+$/,'');
+    if(!l.trim()) continue;
+    if(ehGrupo(l,GRUPOS_D)){ tipo='D'; grupo=l.trim(); continue; }
+    if(ehGrupo(l,GRUPOS_P)){ tipo='P'; grupo=l.trim(); continue; }
+
+    // rubrica: codigo  nome  referencia  valor
+    var m=/^\s*(\d{1,6})\s+([A-Za-zÀ-ÿ0-9º°ªµ%\/\.\,\(\)\-\+ ]+?)\s+([\d]{1,3}:[\d]{2}|,\d+|[\d.,]+)\s+([\d.,]+)\s*$/.exec(l);
+    if(m){
+      var nome=m[2].replace(/\s+/g,' ').trim();
+      if(/^total|^l[ií]quido/i.test(nome)) continue;
+      d.rubricas.push({cod:m[1],nome:nome,ref:m[3],refN:nh(m[3]),valor:nb(m[4]),tipo:tipo,grupo:grupo});
+      continue;
+    }
+    // linha de férias:  dd/mm/aaaa a dd/mm/aaaa  dias [faltas]  perc
+    var f=/^\s*(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})\s+([\d.,]+)(?:\s+(\d+))?\s+([\d.,]+)\s*$/.exec(l);
+    if(f){ d.ferias.push({ini:pd(f[1]),fim:pd(f[2]),dias:nb(f[3]),faltas:f[4]?+f[4]:0,perc:nb(f[5])}); continue; }
+
+    // pares  Rótulo: valor
+    var re=/([A-Za-zÀ-ÿ0-9º°%.\s\/]+?):\s*([\d.,]+)/g, p;
+    while((p=re.exec(l))){
+      var k=p[1].replace(/\s+/g,' ').trim();
+      if(k) d.bases[k]=nb(p[2]);
+    }
+  }
+
+  var t=/Totais:\s*([\d.,]+)\s+([\d.,]+)/.exec(todo);
+  if(t){ d.totalP=nb(t[1]); d.totalD=nb(t[2]); }
+  var lq=/L[ií]quido rescis[aã]o:\s*([\d.,]+)/.exec(todo);
+  if(lq) d.liquido=nb(lq[1]);
+
+  if(!d.rubricas.length) d.erros.push('Nenhuma rubrica reconhecida — confira se o texto colado é o relatório analítico.');
+  if(!d.admissao) d.erros.push('Data de admissão não encontrada.');
+  if(!d.demissao) d.erros.push('Data de demissão não encontrada.');
+
+  // tipo de aviso
+  if(temRub(d,/AVISO\s*PR[EÉ]VIO\s*REAVIDO|AVISO\s*N[AÃ]O\s*CUMPRIDO/,'D')) d.tipoAviso='reavido';
+  else if(temRub(d,/AVISO\s*PR[EÉ]VIO/,'P')) d.tipoAviso='indenizado';
+  else if(d.avisoIndenizadoFlag) d.tipoAviso='indenizado';
+  else d.tipoAviso = (MOTIVOS[d.motivo].aviso==='nenhum')?'nenhum':'trabalhado';
+
+  return d;
+}
+function temRub(d,re,tipo){
+  for(var i=0;i<d.rubricas.length;i++){
+    var r=d.rubricas[i];
+    if((!tipo||r.tipo===tipo) && re.test(r.nome.toUpperCase())) return true;
+  }
+  return false;
+}
+function rubs(d,re,tipo){
+  var o=[];
+  for(var i=0;i<d.rubricas.length;i++){
+    var r=d.rubricas[i];
+    if((!tipo||r.tipo===tipo) && re.test(r.nome.toUpperCase())) o.push(r);
+  }
+  return o;
+}
+function soma(lista){var s=0;for(var i=0;i<lista.length;i++)s+=lista[i].valor;return r2(s);}
+function somaRef(lista){var s=0;for(var i=0;i<lista.length;i++)s+=lista[i].refN;return r2(s);}
+/* só as rubricas-base: fora as de média/vantagem, que repetem a mesma referência */
+function semMedia(lista){
+  var o=[];
+  for(var i=0;i<lista.length;i++) if(!/M[EÉ]DIA|VANTAG/.test(lista[i].nome.toUpperCase())) o.push(lista[i]);
+  return o;
+}
+function cods(){
+  var o=[];
+  for(var a=0;a<arguments.length;a++){
+    var l=arguments[a]||[];
+    for(var i=0;i<l.length;i++) if(o.indexOf(l[i].cod)<0) o.push(l[i].cod);
+  }
+  return o;
+}
+
+/* ----------------------- classificação das verbas ----------------------- */
+function classificar(d){
+  var C={};
+  C.saldo       = rubs(d,/SALDO\s*DE\s*SAL/,'P');
+  C.avisoTodos  = rubs(d,/AVISO\s*PREVIO|AVISO\s*PR[EÉ]VIO/,'P');
+  C.avisoReavido= rubs(d,/AVISO\s*PREVIO\s*REAVIDO|AVISO\s*PR[EÉ]VIO\s*REAVIDO/,'D');
+  var d13=rubs(d,/13\s*SALARIO|13[Oº°]|DECIMO\s*TERCEIRO|13[.\s]*SAL/,'P');
+  C.d13Aviso=[];C.d13=[];
+  for(var i=0;i<d13.length;i++){ (/1\/12\s*INDENIZ/.test(d13[i].nome.toUpperCase())?C.d13Aviso:C.d13).push(d13[i]); }
+  var fer=rubs(d,/F[EÉ]RIAS|FER\s/,'P');
+  C.feriasVenc=[];C.feriasProp=[];C.feriasAviso=[];C.terco=[];
+  for(i=0;i<fer.length;i++){
+    var n=fer[i].nome.toUpperCase();
+    if(/1\/3/.test(n)) C.terco.push(fer[i]);
+    else if(/1\/12\s*INDENIZ/.test(n)) C.feriasAviso.push(fer[i]);
+    else if(/VENCID/.test(n)) C.feriasVenc.push(fer[i]);
+    else C.feriasProp.push(fer[i]);
+  }
+  C.inssMensal = rubs(d,/INSS(?!.*13)/,'D');
+  C.inss13     = rubs(d,/INSS.*13/,'D');
+  C.irrf       = rubs(d,/IRRF|IMPOSTO\s*DE\s*RENDA|I\.?R\.?R\.?F/,'D');
+  C.vt         = rubs(d,/VALE\s*TRANSPORTE/,'D');
+  C.adiant     = rubs(d,/ADIANT/,'D');
+  C.faltas     = rubs(d,/FALTAS?/,'D');
+  C.pat        = rubs(d,/VALE\s*(REFEI|ALIMENT)|CESTA|REFEI[CÇ][AÃ]O/,'P');
+  C.multa477   = rubs(d,/MULTA.*477|477.*MULTA/,'P');
+  C.pensao     = rubs(d,/PENS[AÃ]O/,'D');
+  // proventos "mensais" = os que sobram depois de tirar tudo que é rescisório/indenizatório
+  var fora=[];
+  ['avisoTodos','d13','d13Aviso','feriasVenc','feriasProp','feriasAviso','terco','pat','multa477']
+    .forEach(function(k){ fora=fora.concat(C[k]); });
+  C.mensais=[];
+  for(i=0;i<d.rubricas.length;i++){
+    var r=d.rubricas[i];
+    if(r.tipo!=='P') continue;
+    if(fora.indexOf(r)>=0) continue;
+    if(/FGTS|MULTA|INDENIZ/.test(r.nome.toUpperCase())) continue;
+    C.mensais.push(r);
+  }
+  return C;
+}
+
+/* ------------------------------ auditoria ------------------------------- */
+function auditar(d){
+  var F=[], C=classificar(d), reg=MOTIVOS[d.motivo]||MOTIVOS.sjc, B=d.bases;
+  var sal=d.salario||0;
+  var cct=d.cctId?cctPorId(d.cctId):null;
+  var prazo=prazoPagamento(cct);
+
+  function add(sev,grupo,titulo,txt,dec,esp,lei,fix){
+    F.push({sev:sev,grupo:grupo,titulo:titulo,txt:txt,
+            dec:(dec==null?null:r2(dec)), esp:(esp==null?null:r2(esp)),
+            dif:(dec==null||esp==null)?null:r2(esp-dec), lei:lei||'', fix:fix||'',
+            rubs:null, un:'brl'});
+  }
+  /* unidade do par declarado × esperado — só 'brl' entra na soma do impacto */
+  function un(u){ if(F.length) F[F.length-1].un=u; }
+  function cmp(sev,grupo,titulo,dec,esp,txt,lei,fix,tol){
+    if(ok2(dec,esp,tol)) add('ok',grupo,titulo,txt,dec,esp,lei);
+    else add(sev,grupo,titulo,txt,dec,esp,lei,fix);
+  }
+  /* liga o último achado às rubricas que o originaram (destaque cruzado na UI) */
+  function rr(lista){ if(F.length&&lista&&lista.length) F[F.length-1].rubs=lista; }
+
+  /* ---- A. cadastro e datas ---- */
+  var G='Datas e cadastro';
+  if(d.admissao&&d.demissao&&d.admissao>=d.demissao)
+    add('erro',G,'Admissão posterior à demissão','Admissão '+fd(d.admissao)+' e demissão '+fd(d.demissao)+'.',null,null,'Consistência cadastral','Corrija as datas no cadastro antes de refazer o cálculo.');
+  if(d.dataAviso&&d.demissao&&d.dataAviso>d.demissao)
+    add('erro',G,'Data do aviso depois do afastamento','Aviso em '+fd(d.dataAviso)+' e afastamento em '+fd(d.demissao)+'.',null,null,'Art. 487 CLT','');
+
+  var diasCLT=diasAvisoDevidos(d.admissao,d.dataAviso||d.demissao,d.motivo);
+  var diasDev=diasAvisoDevidos(d.admissao,d.dataAviso||d.demissao,d.motivo,cct,d.nascimento);
+  var avisoRub=C.avisoTodos.length?C.avisoTodos[0]:null;
+  var diasLanc = avisoRub?Math.round(avisoRub.refN):(C.avisoReavido.length?Math.round(C.avisoReavido[0].refN):0);
+  if(d.tipoAviso==='indenizado'||d.tipoAviso==='reavido'){
+    cmp('erro',G,'Dias de aviso prévio',diasLanc,diasDev,
+      'Contrato de '+anosContrato(d)+' ano(s) completo(s). Devidos '+diasDev+' dias'+
+      (reg.aviso==='empregador'?' (30 + 3 por ano completo)':' (aviso do empregado é sempre 30 dias)')+
+      (diasDev>diasCLT?' — a lei daria '+diasCLT+', a convenção coletiva amplia para '+diasDev:'')+
+      '. Lançados '+diasLanc+' dias.',
+      'Lei 12.506/2011, art. 1º — a proporcionalidade é benefício exclusivo do empregado (NT MTE 184/2012), não se aplica ao pedido de demissão.'+
+      (diasDev>diasCLT?' Ampliação pela cláusula de aviso prévio da convenção coletiva.':''),
+      'Ajuste a quantidade de dias do aviso e refaça a projeção.',0.5);
+    un('dias'); rr(cods(C.avisoTodos,C.avisoReavido));
+  }
+  if(d.tipoAviso==='indenizado'&&d.demissao){
+    var projEsp=addDias(d.demissao,diasDev);
+    if(d.projecao){
+      if(difDias(projEsp,d.projecao)!==0)
+        add('erro',G,'Data de projeção do aviso incorreta','Projeção lançada '+fd(d.projecao)+'; esperada '+fd(projEsp)+' ('+fd(d.demissao)+' + '+diasDev+' dias).',null,null,
+          'Art. 487, §1º CLT + OJ 82 SDI-1 TST — a projeção integra o tempo de serviço.',
+          'A projeção errada altera os avos de 13º e de férias.');
+      else add('ok',G,'Data de projeção do aviso','Projeção '+fd(d.projecao)+' confere com '+fd(d.demissao)+' + '+diasDev+' dias.');
+    } else add('alerta',G,'Projeção do aviso não informada','Com aviso indenizado a projeção deveria ser '+fd(projEsp)+'.',null,null,'Art. 487, §1º CLT','');
+  }
+  var atrasoPgto=0;
+  if(d.demissao&&d.pagamento){
+    var limite=addDias(d.demissao,prazo);
+    atrasoPgto=difDias(limite,d.pagamento);
+    var fonte=prazo<CFG.prazoPgto?' (prazo encurtado pela convenção coletiva)':'';
+    if(atrasoPgto>0) add('erro',G,'Pagamento fora do prazo',
+      'Rescisão paga em '+fd(d.pagamento)+', '+atrasoPgto+' dia(s) após o limite de '+fd(limite)+fonte+'.',null,null,
+      'Art. 477, §6º CLT ('+prazo+' dias corridos) — §8º prevê multa de 1 salário do empregado a favor dele.',
+      'Multa devida: '+mo(sal)+'. Provisione ou pague junto com a rescisão.');
+    else add('ok',G,'Prazo de pagamento','Pago em '+fd(d.pagamento)+', dentro do limite de '+fd(limite)+fonte+'.');
+  } else add('alerta',G,'Data de pagamento não informada','Sem a data não dá para conferir o prazo do art. 477, §6º.',null,null,'Art. 477, §6º CLT','');
+
+  if(d.nascimento&&d.demissao){
+    var m18=addMeses(d.nascimento,18*12);
+    if(m18>d.demissao) add('alerta',G,'Empregado menor de 18 anos','Nascimento '+fd(d.nascimento)+'. A quitação depende de assistência do responsável legal.',null,null,'Art. 439 CLT','Colha assinatura do responsável no TRCT.');
+  }
+
+  /* ---- B. verbas devidas x motivo ---- */
+  G='Verbas devidas × motivo';
+  add('info',G,'Motivo considerado: '+reg.nome,
+      'Aviso: '+({empregador:'devido pelo empregador',empregado:'devido pelo empregado',metade:'metade (acordo)',nenhum:'não se aplica'}[reg.aviso])+
+      ' · 13º proporcional: '+(reg.d13?'devido':'INDEVIDO')+
+      ' · Férias proporcionais: '+(reg.feriasProp?'devidas':'INDEVIDAS')+
+      ' · Multa do FGTS: '+reg.multa+'% · Saque do FGTS: '+reg.saque+
+      ' · Seguro-desemprego: '+(reg.seguro?'sim':'não'));
+
+  var t13=soma(C.d13)+soma(C.d13Aviso);
+  if(!reg.d13 && t13>0.02){
+    add('erro',G,'13º proporcional pago indevidamente','Motivo "'+reg.nome+'" não gera 13º proporcional, mas foram lançados '+mo(t13)+'.',t13,0,'Súmula 171 TST / Lei 4.090/62 — justa causa faz perder o 13º proporcional.','Estorne a verba.');
+    rr(cods(C.d13,C.d13Aviso));
+  }
+  if(reg.d13 && t13<=0.02)
+    add('erro',G,'13º proporcional não lançado','Motivo "'+reg.nome+'" gera 13º proporcional e nenhum valor foi encontrado.',0,null,'Lei 4.090/62','Inclua o 13º proporcional.');
+
+  var tfp=soma(C.feriasProp)+soma(C.feriasAviso);
+  if(!reg.feriasProp && tfp>0.02){
+    add('erro',G,'Férias proporcionais pagas indevidamente','Motivo "'+reg.nome+'" não gera férias proporcionais, mas foram lançados '+mo(tfp)+'.',tfp,0,'Súmula 171 TST','Estorne a verba (férias vencidas continuam devidas).');
+    rr(cods(C.feriasProp,C.feriasAviso));
+  }
+  if(reg.feriasProp && tfp<=0.02 && d.admissao && d.demissao && avosFerias(inicioAquisitivoAtual(d.admissao,d.demissao),d.demissao)>0)
+    add('erro',G,'Férias proporcionais não lançadas','Há avos no período aquisitivo em aberto e nenhuma férias proporcional foi paga.',0,null,'Súmula 261 TST — devidas mesmo com menos de 1 ano de casa.','Inclua as férias proporcionais + 1/3.');
+
+  var multaEsp = reg.multa;
+  var multaDecl = B['FGTS 40%']!=null?B['FGTS 40%']:0;
+  var multa20 = B['FGTS 20%']!=null?B['FGTS 20%']:0;
+  if(multaEsp===0 && (multaDecl>0.02||multa20>0.02))
+    add('erro','FGTS','Multa do FGTS indevida','Motivo "'+reg.nome+'" não gera multa rescisória, mas há '+mo(multaDecl+multa20)+' lançado.',multaDecl+multa20,0,'Art. 18, §1º Lei 8.036/90','');
+  if(multaEsp===40 && multaDecl<=0.02)
+    add('erro','FGTS','Multa de 40% do FGTS ausente','Dispensa sem justa causa gera multa de 40% sobre todos os depósitos do contrato.',0,null,'Art. 18, §1º Lei 8.036/90','Calcule 40% sobre o saldo + FGTS da rescisão.');
+  if(multaEsp===20 && multa20<=0.02 && multaDecl>0.02)
+    add('erro','FGTS','Acordo do art. 484-A com multa de 40%','No acordo a multa é de 20%, e o saque limitado a 80%.',multaDecl,r2(multaDecl/2),'Art. 484-A CLT','');
+
+  if(d.tipoAviso==='reavido' && reg.aviso==='empregador')
+    add('erro',G,'Aviso descontado em dispensa pelo empregador','O motivo é "'+reg.nome+'" — o aviso é devido AO empregado, não pode ser descontado dele.',null,null,'Art. 487, §1º CLT','Estorne o desconto e pague o aviso indenizado.');
+  if(d.tipoAviso==='indenizado' && reg.aviso==='empregado')
+    add('erro',G,'Aviso indenizado pago em pedido de demissão','No pedido de demissão o empregado é que deve o aviso; salvo dispensa expressa do cumprimento pelo empregador, não há aviso a pagar.',null,null,'Art. 487, §2º CLT / Súmula 276 TST','Confirme se houve dispensa do cumprimento por escrito.');
+
+  /* ---- C. avos ---- */
+  G='Avos';
+  var fimContagem = (d.tipoAviso==='indenizado'&&reg.projeta) ? (d.projecao||addDias(d.demissao,diasDev)) : d.demissao;
+  if(d.admissao&&d.demissao){
+    var a13esp=avos13(d.admissao,fimContagem);
+    var a13dec=Math.round(somaRef(semMedia(C.d13))+somaRef(semMedia(C.d13Aviso)));
+    if(reg.d13){
+      cmp('erro',G,'Avos de 13º proporcional',a13dec,a13esp,
+        'Período '+fd(new Date(Date.UTC(fimContagem.getUTCFullYear(),0,1))>d.admissao?new Date(Date.UTC(fimContagem.getUTCFullYear(),0,1)):d.admissao)+' a '+fd(fimContagem)+
+        (d.tipoAviso==='indenizado'&&reg.projeta?' (inclui a projeção do aviso)':'')+
+        ' → '+a13esp+' avos. Lançados '+a13dec+'.',
+        'Lei 4.090/62 (mês de 15 dias ou mais) + Súmula 305 TST (a projeção do aviso indenizado gera avos).',
+        'Cada avo vale '+mo(sal/12)+'.',0.5);
+      un('avos'); rr(cods(semMedia(C.d13),semMedia(C.d13Aviso)));
+    }
+    var iniAq=inicioAquisitivoAtual(d.admissao,d.demissao);
+    var afEsp=avosFerias(iniAq,fimContagem);
+    var afDec=Math.round(somaRef(semMedia(C.feriasProp))+somaRef(semMedia(C.feriasAviso)));
+    if(reg.feriasProp){
+      cmp('erro',G,'Avos de férias proporcionais',afDec,afEsp,
+        'Período aquisitivo desde '+fd(iniAq)+' até '+fd(fimContagem)+
+        (d.tipoAviso==='indenizado'&&reg.projeta?' (inclui a projeção do aviso)':'')+
+        ' → '+afEsp+' avos. Lançados '+afDec+'.',
+        'Art. 146, § único CLT + Súmula 305 TST.','Cada avo vale '+mo(sal/12)+' (+1/3).',0.5);
+      un('avos'); rr(cods(semMedia(C.feriasProp),semMedia(C.feriasAviso)));
+    }
+    if(d.tipoAviso==='indenizado'&&reg.projeta){
+      var temAvo13=C.d13Aviso.length>0, temAvoFer=C.feriasAviso.length>0;
+      if(!temAvo13||!temAvoFer){
+        var falta=(!temAvo13?'13º':'')+(!temAvo13&&!temAvoFer?' e ':'')+(!temAvoFer?'férias':'');
+        var a13sem=avos13(d.admissao,d.demissao), afSem=avosFerias(iniAq,d.demissao);
+        if((!temAvo13&&a13esp>a13sem)||(!temAvoFer&&afEsp>afSem))
+          add('erro',G,'Avo do aviso indenizado não lançado ('+falta+')',
+            'A projeção até '+fd(fimContagem)+' fecha mais um avo que não aparece no cálculo.',null,null,
+            'Súmula 305 TST / OJ 82 SDI-1 TST','Lance a rubrica de 1/12 indenizado de '+falta+'.');
+      }
+    }
+  }
+  for(var i=0;i<d.ferias.length;i++){
+    var pf=d.ferias[i];
+    if(pf.faltas>5){
+      var diasDir=diasFeriasPorFaltas(pf.faltas);
+      add('alerta','Férias','Faltas injustificadas reduzem o direito a férias',
+        'Período '+fd(pf.ini)+' a '+fd(pf.fim)+' com '+pf.faltas+' falta(s): direito de '+diasDir+' dias (não 30). Dias lançados: '+mo(pf.dias)+'.',
+        null,null,'Art. 130 CLT','Recalcule as férias desse período pela tabela do art. 130.');
+    }
+    if(pf.ini&&d.demissao){
+      var concessivo=addMeses(pf.ini,24);
+      if(concessivo<d.demissao && pf.dias>=29)
+        add('erro','Férias','Férias vencidas fora do período concessivo',
+          'Aquisitivo iniciado em '+fd(pf.ini)+': o período concessivo terminou em '+fd(concessivo)+'. Férias não concedidas no prazo são pagas em DOBRO.',
+          null,null,'Art. 137 CLT / Súmula 81 TST','Dobre o valor dessas férias vencidas (o 1/3 também).');
+    }
+  }
+
+  /* ---- D. valores ---- */
+  G='Valores das verbas';
+  if(C.saldo.length&&sal>0&&d.demissao){
+    var diasSaldo=Math.round(C.saldo[0].refN), vSaldo=soma(C.saldo);
+    var espSaldo=r2(sal/30*diasSaldo);
+    var alt31=r2(sal/ultimoDiaMes(d.demissao.getUTCFullYear(),d.demissao.getUTCMonth())*diasSaldo);
+    if(diasSaldo!==d.demissao.getUTCDate()){
+      add('alerta',G,'Dias de saldo de salário','Demissão dia '+d.demissao.getUTCDate()+' e saldo de '+diasSaldo+' dia(s).',diasSaldo,d.demissao.getUTCDate(),'Art. 64 CLT','Confira faltas/afastamentos que justifiquem a diferença.');
+      un('dias'); rr(cods(C.saldo));
+    }
+    if(ok2(vSaldo,espSaldo)) add('ok',G,'Saldo de salário','Confere: '+mo(sal)+' / 30 × '+diasSaldo+' dias.',vSaldo,espSaldo);
+    else if(ok2(vSaldo,alt31))
+      add('erro',G,'Saldo de salário dividido pelos dias do mês (não por 30)',
+        'O sistema usou '+mo(sal)+' / '+ultimoDiaMes(d.demissao.getUTCFullYear(),d.demissao.getUTCMonth())+' × '+diasSaldo+'. O mês do salário é sempre de 30 dias.',
+        vSaldo,espSaldo,'Art. 64 CLT — o salário-dia é a remuneração mensal dividida por 30.',
+        'Diferença a pagar ao empregado: '+mo(espSaldo-vSaldo)+'.');
+    else cmp('erro',G,'Saldo de salário',vSaldo,espSaldo,mo(sal)+' / 30 × '+diasSaldo+' dias.','Art. 64 CLT','');
+    rr(cods(C.saldo));
+  }
+
+  var b13=semMedia(C.d13);
+  if(b13.length&&sal>0){
+    var av=somaRef(b13);
+    cmp('erro',G,'Base do 13º proporcional',soma(b13),r2(sal/12*av),mo(sal)+' / 12 × '+av+' avos.','Lei 4.090/62','');
+    rr(cods(b13));
+  }
+  var b13a=semMedia(C.d13Aviso);
+  if(b13a.length&&sal>0){
+    cmp('erro',G,'13º do aviso indenizado (1/12)',soma(b13a),r2(sal/12*somaRef(b13a)),mo(sal)+' / 12 × '+somaRef(b13a)+'.','Súmula 305 TST','');
+    rr(cods(b13a));
+  }
+  var bfp=semMedia(C.feriasProp);
+  if(bfp.length&&sal>0){
+    var avf=somaRef(bfp);
+    cmp('erro',G,'Base das férias proporcionais',soma(bfp),r2(sal/12*avf),mo(sal)+' / 12 × '+avf+' avos.','Art. 146, § único CLT','');
+    rr(cods(bfp));
+  }
+  var bfv=semMedia(C.feriasVenc);
+  if(bfv.length&&sal>0){
+    cmp('erro',G,'Base das férias vencidas',soma(bfv),r2(sal*somaRef(bfv)),'Salário integral × '+somaRef(bfv)+' período(s).','Art. 137 CLT','');
+    rr(cods(bfv));
+  }
+
+  var totFerias=soma(C.feriasProp)+soma(C.feriasVenc)+soma(C.feriasAviso);
+  var totTerco=soma(C.terco);
+  if(totFerias>0.02){
+    cmp('erro','Férias','Terço constitucional',totTerco,r2(totFerias/3),
+      'Base de férias '+mo(totFerias)+' ÷ 3 = '+mo(totFerias/3)+'. O 1/3 incide sobre TODAS as parcelas de férias (vencidas, proporcionais e do aviso).',
+      'Art. 7º, XVII, CF/88','Some o 1/3 sobre as parcelas que ficaram de fora.',0.05);
+    rr(cods(C.terco));
+  }
+
+  if(d.tipoAviso==='indenizado'&&C.avisoTodos.length&&sal>0){
+    var baseAv=semMedia(C.avisoTodos);
+    if(baseAv.length){
+      var dAv=Math.round(baseAv[0].refN)||diasDev;
+      cmp('erro',G,'Aviso prévio indenizado',soma(baseAv),r2(sal/30*dAv),mo(sal)+' / 30 × '+dAv+' dias.','Art. 487, §1º CLT','');
+      rr(cods(C.avisoTodos));
+    }
+  }
+  if(d.tipoAviso==='reavido'&&C.avisoReavido.length&&sal>0){
+    var vRe=soma(C.avisoReavido), dRe=Math.round(C.avisoReavido[0].refN)||30;
+    cmp('erro','Descontos','Aviso não cumprido descontado',vRe,r2(sal/30*dRe),
+      'Desconto de '+dRe+' dia(s) de aviso. O empregado deve no máximo 30 dias, calculados sobre o salário.',
+      'Art. 487, §2º CLT','',0.05);
+    rr(cods(C.avisoReavido));
+    if(dRe>30){ add('erro','Descontos','Desconto de aviso acima de 30 dias','Foram descontados '+dRe+' dias.',dRe,30,'Art. 487, §2º c/c NT MTE 184/2012','A proporcionalidade não se aplica contra o empregado.'); un('dias'); }
+  }
+
+  /* médias */
+  G='Médias de habituais';
+  var temHabitual = temRub(d,/HORA\s*EXTRA|HORAS\s*EXTRAS|ADICIONAL|COMISS|DSR|REFLEXO|NOTURNO|PERICUL|INSALUB|ACUMULO/,'P')
+                 || C.mensais.length>1;
+  if(temHabitual){
+    var check=[['13º',C.d13.concat(C.d13Aviso)],['Férias',C.feriasProp.concat(C.feriasVenc,C.feriasAviso)]];
+    if(d.tipoAviso==='indenizado') check.push(['Aviso prévio',C.avisoTodos]);
+    for(i=0;i<check.length;i++){
+      var lista=check[i][1], temMedia=false, medias=[];
+      for(var j=0;j<lista.length;j++) if(/M[EÉ]DIA|VANTAG/.test(lista[j].nome.toUpperCase())){temMedia=true;medias.push(lista[j]);}
+      if(lista.length&&!temMedia)
+        add('erro',G,'Sem médias em '+check[i][0],
+          'Há verbas variáveis habituais no contrato, mas nenhuma média foi integrada ao '+check[i][0]+'.',
+          null,null,'Súmulas 45, 60, 172 e 347 TST — habituais integram 13º, férias e aviso.',
+          'Inclua a média das horas extras/DSR/adicionais no cálculo do '+check[i][0]+'.');
+      else if(lista.length){ add('ok',G,'Médias integradas ao '+check[i][0],'Média encontrada no cálculo.'); rr(cods(medias)); }
+    }
+  }
+
+  /* ---- E. bases e encargos ---- */
+  G='INSS';
+  var espBaseInss = r2(soma(C.mensais)-soma(C.faltas));
+  var decBaseInss = B['Base INSS Mensal'];
+  if(decBaseInss!=null){
+    cmp('erro',G,'Base do INSS mensal',decBaseInss,espBaseInss,
+      'Proventos mensais tributáveis '+mo(soma(C.mensais))+' − faltas '+mo(soma(C.faltas))+'. Aviso indenizado, férias indenizadas, 1/3, vale-transporte e PAT ficam de fora.',
+      'Art. 28, §9º, Lei 8.212/91 + REsp 1.230.957/RS (aviso indenizado não integra).',
+      'Confira se alguma verba indenizatória entrou na base.',0.05);
+    rr(cods(C.mensais,C.faltas));
+    var espInss=calcInss(decBaseInss), decInss=soma(C.inssMensal);
+    if(decInss>0.001||espInss>0.001){
+      cmp('alerta',G,'INSS sobre a rescisão',decInss,espInss,
+        'Base '+mo(decBaseInss)+' pela tabela progressiva configurada.','Art. 28 Lei 8.212/91',
+        'Se divergir só por centavos, é a tabela configurada — confira em Tabelas & regras.',0.05);
+      rr(cods(C.inssMensal));
+    }
+  }
+  var decBase13=B['Base INSS 13º Salário'], espBase13=r2(soma(C.d13)+soma(C.d13Aviso));
+  if(decBase13!=null){
+    cmp('erro',G,'Base do INSS do 13º',decBase13,espBase13,
+      'Total do 13º proporcional + 13º do aviso indenizado = '+mo(espBase13)+'. O 13º tem incidência separada da folha.',
+      'Art. 214, §6º, Dec. 3.048/99 — o 13º sofre incidência isolada.','',0.05);
+    rr(cods(C.d13,C.d13Aviso));
+    var espI13=calcInss(decBase13), decI13=soma(C.inss13);
+    if(decI13>0.001||espI13>0.001){
+      cmp('alerta',G,'INSS do 13º salário',decI13,espI13,'Base '+mo(decBase13)+' com tabela própria.','Dec. 3.048/99','',0.05);
+      rr(cods(C.inss13));
+    }
+  }
+
+  G='IRRF';
+  var decBaseIr=B['Base IRRF Mensal'], abatIr=B['Abat. IRRF Mensal']||0;
+  if(decBaseIr!=null){
+    var baseLiq=r2(decBaseIr-abatIr), espIr=calcIrrf(baseLiq), decIr=soma(C.irrf);
+    cmp('alerta',G,'IRRF sobre a rescisão',decIr,espIr,
+      'Base '+mo(decBaseIr)+' − deduções '+mo(abatIr)+' = '+mo(baseLiq)+'. Férias indenizadas, 1/3 sobre indenizadas e aviso indenizado são isentos.',
+      'Súmula 386 STJ / Súmula 125 STJ / IN RFB 1.500 art. 6º-7º','Confira a tabela do IRRF em Tabelas & regras.',0.05);
+    rr(cods(C.irrf));
+  }
+
+  G='FGTS';
+  var bFm=B['Base FGTS Mensal'], fM=B['FGTS Mensal'];
+  if(bFm!=null&&fM!=null) cmp('erro',G,'FGTS mensal (8%)',fM,r2(bFm*CFG.fgts/100),'8% sobre '+mo(bFm)+'.','Art. 15 Lei 8.036/90','',0.05);
+  if(bFm!=null) cmp('erro',G,'Base do FGTS mensal',bFm,espBaseInss,'Deve coincidir com a base de remuneração do mês.','Art. 15 Lei 8.036/90','',0.05);
+  var bF13=B['Base FGTS 13º'], f13=B['FGTS 13º'];
+  if(bF13!=null&&f13!=null) cmp('erro',G,'FGTS do 13º (8%)',f13,r2(bF13*CFG.fgts/100),'8% sobre '+mo(bF13)+'.','Art. 15 Lei 8.036/90','',0.05);
+  if(bF13!=null) cmp('erro',G,'Base do FGTS do 13º',bF13,r2(soma(C.d13)),'Total do 13º proporcional (o 13º do aviso vai na base do aviso).','Art. 15 Lei 8.036/90','',0.05);
+  var bFa=B['Base FGTS Aviso Prévio'], fA=B['FGTS Aviso Prévio'];
+  if(d.tipoAviso==='indenizado'){
+    var espBFa=r2(soma(C.avisoTodos)+soma(C.d13Aviso));
+    if(bFa!=null) cmp('erro',G,'Base do FGTS sobre o aviso indenizado',bFa,espBFa,
+      'Aviso indenizado '+mo(soma(C.avisoTodos))+' + 13º do aviso '+mo(soma(C.d13Aviso))+'. O aviso indenizado tem FGTS mesmo sem INSS.',
+      'Art. 15, §1º Lei 8.036/90 + Súmula 305 TST','',0.05);
+    if(bFa!=null&&fA!=null) cmp('erro',G,'FGTS sobre o aviso (8%)',fA,r2(bFa*CFG.fgts/100),'8% sobre '+mo(bFa)+'.','Art. 15 Lei 8.036/90','',0.05);
+  } else if(fA!=null&&fA>0.02){
+    add('erro',G,'FGTS de aviso sem aviso indenizado','Há '+mo(fA)+' de FGTS sobre aviso, mas o aviso não é indenizado pelo empregador.',fA,0,'Art. 15 Lei 8.036/90','');
+  }
+  if(reg.multa>0){
+    var saldoF=B['Saldo FGTS']||0;
+    var baseMulta=r2(saldoF+(fM||0)+(f13||0)+(fA||0));
+    var espMulta=r2(baseMulta*reg.multa/100);
+    var decM = reg.multa===20 ? (B['FGTS 20%']||0) : (B['FGTS 40%']||0);
+    cmp('erro',G,'Multa de '+reg.multa+'% do FGTS',decM,espMulta,
+      'Saldo da conta '+mo(saldoF)+' + FGTS da rescisão '+mo((fM||0)+(f13||0)+(fA||0))+' = '+mo(baseMulta)+' × '+reg.multa+'%.',
+      'Art. 18, §1º e §2º Lei 8.036/90','Confirme o saldo do FGTS no extrato — é a fonte mais comum de erro na multa.',0.05);
+    if(saldoF<=0) add('alerta',G,'Saldo do FGTS zerado no cálculo','Sem o saldo da conta vinculada a multa sai a menor.',null,null,'Art. 18, §1º Lei 8.036/90','Puxe o extrato do FGTS antes de fechar a rescisão.');
+  }
+
+  /* ---- F. descontos ---- */
+  G='Descontos';
+  if(C.vt.length&&sal>0){
+    var vvt=soma(C.vt), lim=r2(sal*0.06);
+    if(vvt>lim+0.02) add('erro',G,'Vale-transporte acima de 6%','Descontado '+mo(vvt)+', limite '+mo(lim)+'.',vvt,lim,'Art. 9º, §1º, Dec. 95.247/87','');
+    else add('ok',G,'Vale-transporte dentro do limite','Descontado '+mo(vvt)+' (limite 6% = '+mo(lim)+').',vvt,vvt);
+    rr(cods(C.vt));
+  }
+  if(C.faltas.length&&sal>0){
+    for(i=0;i<C.faltas.length;i++){
+      var fr=C.faltas[i], nu=fr.nome.toUpperCase();
+      if(/HORAS/.test(nu)){
+        var vh=r2(sal/CFG.horasMes);
+        cmp('alerta',G,'Desconto de horas — '+fr.nome,fr.valor,r2(vh*fr.refN),
+          fr.ref+' h × valor-hora '+mo(vh)+' ('+mo(sal)+' / '+CFG.horasMes+').','Art. 64 CLT','Confira a jornada mensal contratada em Tabelas & regras.',0.1);
+        rr([fr.cod]);
+      } else if(/DIAS?/.test(nu)){
+        cmp('erro',G,'Desconto de faltas — '+fr.nome,fr.valor,r2(sal/30*fr.refN),
+          Math.round(fr.refN)+' dia(s) × '+mo(sal/30)+'.','Art. 64 CLT','',0.05);
+        rr([fr.cod]);
+      }
+    }
+    if(temRub(d,/FALTAS/,'D') && !temRub(d,/DSR|REPOUSO/,'D'))
+      add('alerta',G,'Falta injustificada sem reflexo no DSR','Houve desconto de falta, mas nenhum desconto de descanso semanal remunerado.',null,null,'Art. 6º, § único, Lei 605/49','Confirme se a falta atinge o DSR da semana.');
+  }
+  /* teto de compensação — descontos legais (INSS/IRRF/pensão/VT/faltas) e o aviso
+     não cumprido, que tem autorização própria no art. 487, §2º, ficam de fora da conta */
+  var totDescCompens=0, listaComp=[];
+  for(i=0;i<d.rubricas.length;i++){
+    var rr2=d.rubricas[i];
+    if(rr2.tipo!=='D') continue;
+    var nomeD=rr2.nome.toUpperCase();
+    if(/INSS|IRRF|IMPOSTO|PENS[AÃ]O|VALE\s*TRANSPORTE|FALTAS|AVISO/.test(nomeD)) continue;
+    totDescCompens+=rr2.valor; listaComp.push(rr2);
+  }
+  totDescCompens=r2(totDescCompens);
+  if(sal>0&&totDescCompens>sal+0.02){
+    add('erro',G,'Compensação acima de uma remuneração','Descontos compensáveis (adiantamentos, empréstimos, avarias) somam '+mo(totDescCompens)+', acima de um salário ('+mo(sal)+').',totDescCompens,sal,'Art. 477, §5º CLT','O excedente deve ser cobrado fora da rescisão.');
+    rr(cods(listaComp));
+  }
+  if(sal>0&&C.avisoReavido.length&&r2(totDescCompens+soma(C.avisoReavido))>sal+0.02){
+    add('alerta',G,'Descontos totais acima de uma remuneração','Somando o aviso não cumprido ('+mo(soma(C.avisoReavido))+') aos demais descontos compensáveis ('+mo(totDescCompens)+') passa de um salário. Há divergência sobre o aviso entrar ou não no teto do §5º.',null,null,'Art. 477, §5º x art. 487, §2º CLT','Se o líquido ficar negativo ou muito reduzido, negocie a diferença fora da rescisão.');
+    rr(cods(listaComp,C.avisoReavido));
+  }
+
+  /* ---- H. convenção coletiva ---- */
+  G='Convenção coletiva';
+  if(!cct){
+    add('alerta',G,'Nenhuma convenção coletiva aplicada',
+      'A conferência acima usou só a CLT. Toda categoria tem CCT ou ACT, e quase sempre há cláusula que muda a rescisão (piso, aviso ampliado, multa própria, homologação, indenização da data-base).',
+      null,null,'Art. 611 e 611-A CLT','Cadastre a convenção da categoria em "Convenções" e selecione-a no card Contrato.');
+  } else {
+    var qual=cct.nome+(cct.sindicato?' — '+cct.sindicato:'');
+    if(!cctVigente(cct,d.demissao))
+      add('erro',G,'Convenção fora de vigência para a data do afastamento',
+        qual+' vigora de '+(cct.vigIni||'—')+' a '+(cct.vigFim||'—')+', e o afastamento foi em '+fd(d.demissao)+'.',
+        null,null,'Art. 614, §3º CLT','Cadastre a convenção do período correto — cláusulas econômicas mudam a cada data-base.');
+    else add('info',G,'Convenção aplicada: '+qual,
+      'Vigência '+(cct.vigIni||'—')+' a '+(cct.vigFim||'—')+
+      (cct.categoria?' · '+cct.categoria:'')+(cct.abrangencia?' · '+cct.abrangencia:'')+'.');
+
+    /* piso salarial */
+    var piso=pisoDaFuncao(cct,d.cargo);
+    if(piso>0&&sal>0){
+      if(sal<piso-0.02)
+        add('erro',G,'Salário abaixo do piso da categoria',
+          'Cargo "'+(d.cargo||'não informado')+'": piso da convenção '+mo(piso)+', salário do contrato '+mo(sal)+
+          '. Toda a rescisão foi calculada sobre uma base menor que a devida.',
+          sal,piso,'Art. 7º, V, CF/88 + cláusula de piso salarial da convenção.',
+          'Refaça o cálculo com o piso — a diferença de '+mo(piso-sal)+' por mês reflete em saldo, 13º, férias, aviso e FGTS.');
+      else add('ok',G,'Piso salarial da categoria','Salário '+mo(sal)+' ≥ piso '+mo(piso)+'.',sal,sal);
+    }
+
+    /* multa própria da convenção por atraso */
+    if(atrasoPgto>0&&cct.pagamento&&cct.pagamento.multaTipo!=='nenhuma'&&cct.pagamento.multaValor>0){
+      var mv=cct.pagamento.multaValor, vMulta=0, expl='';
+      if(cct.pagamento.multaTipo==='salarios'){ vMulta=r2(sal*mv); expl=mv+' salário(s)'; }
+      else if(cct.pagamento.multaTipo==='dias'){ vMulta=r2(sal/30*mv*atrasoPgto); expl=mv+' dia(s) de salário por dia de atraso × '+atrasoPgto+' dia(s)'; }
+      else { vMulta=r2(mv); expl='valor fixo'; }
+      add('erro',G,'Multa da convenção por atraso no pagamento',
+        'Atraso de '+atrasoPgto+' dia(s). A convenção prevê '+expl+' = '+mo(vMulta)+
+        (cct.pagamento.multaCumulativa?', cumulativa com a multa do art. 477, §8º ('+mo(sal)+').'
+                                       :', não cumulativa com a do art. 477, §8º — aplica-se a maior.'),
+        0,vMulta,'Cláusula de multa rescisória da convenção coletiva.',
+        cct.pagamento.multaCumulativa?'Total a acrescentar: '+mo(vMulta+sal)+'.':'Aplique '+mo(Math.max(vMulta,sal))+'.');
+    }
+
+    /* indenização adicional da data-base — Lei 6.708/79, art. 9º */
+    if(cct.dataBaseIndeniz&&cct.dataBase&&(d.motivo==='sjc'||d.motivo==='indireta')&&sal>0){
+      var terminoProj=(d.tipoAviso==='indenizado'&&d.projecao)?d.projecao:d.demissao;
+      var db=dataBaseProxima(cct.dataBase,terminoProj);
+      if(db){
+        var temInd=temRub(d,/INDENIZ.*ADICIONAL|ADICIONAL.*DATA.?BASE|ART.?\s*9|LEI\s*6\.?708/,'P');
+        if(!temInd)
+          add('erro',G,'Indenização adicional da data-base não paga',
+            'Término projetado em '+fd(terminoProj)+', dentro dos 30 dias que antecedem a data-base de '+fd(db)+
+            '. É devido 1 salário mensal a mais.',
+            0,sal,'Lei 6.708/79, art. 9º + Súmula 182 TST (o aviso indenizado conta) e Súmula 314 TST (a projeção alcança a data-base).',
+            'Lance a indenização adicional de '+mo(sal)+'.');
+        else add('ok',G,'Indenização adicional da data-base','Término em '+fd(terminoProj)+' cai na janela da data-base de '+fd(db)+' e a verba está lançada.');
+      }
+    }
+
+    /* vedação de desconto do aviso */
+    if(cct.aviso&&cct.aviso.vedaDesconto&&d.tipoAviso==='reavido'&&C.avisoReavido.length){
+      add('erro',G,'Desconto do aviso vedado pela convenção',
+        'A convenção proíbe descontar o aviso não cumprido, e foram descontados '+mo(soma(C.avisoReavido))+'.',
+        soma(C.avisoReavido),0,'Cláusula de aviso prévio da convenção coletiva (art. 611-A CLT, condição mais favorável).',
+        'Estorne o desconto.');
+      rr(cods(C.avisoReavido));
+    }
+
+    /* contribuição assistencial / confederativa */
+    var assist=rubs(d,/ASSISTENCIAL|CONFEDERATIV|CONTRIB.*SINDICAL|MENSALIDADE\s*SIND|SINDICAL/,'D');
+    if(assist.length){
+      var vA=soma(assist);
+      if(!cct.assistencial.prevista)
+        add('erro',G,'Contribuição sindical descontada sem previsão na convenção',
+          'Desconto de '+mo(vA)+' e a convenção cadastrada não prevê a cláusula.',vA,0,
+          'Art. 578 e 579 CLT (reforma de 2017) — contribuição depende de previsão e de autorização.','Estorne ou corrija o cadastro da convenção.');
+      else {
+        var limA=cct.assistencial.teto>0?cct.assistencial.teto:(cct.assistencial.perc>0?r2(sal*cct.assistencial.perc/100):0);
+        if(limA>0&&vA>limA+0.02)
+          add('erro',G,'Contribuição assistencial acima do previsto',
+            'Descontado '+mo(vA)+', limite da convenção '+mo(limA)+'.',vA,limA,'Cláusula de contribuição assistencial da convenção.','');
+        else
+          add('alerta',G,'Contribuição assistencial descontada',
+            'Desconto de '+mo(vA)+'. É válido para toda a categoria, mas exige direito de oposição garantido e divulgado.',
+            null,null,'STF, Tema 935 (ARE 1.018.459) — assistencial é exigível de todos, assegurado o direito de oposição.',
+            'Guarde a comprovação de que o prazo de oposição foi divulgado e que este empregado não se opôs.');
+      }
+      rr(cods(assist));
+    } else if(cct.assistencial.prevista&&cct.assistencial.incideRescisao)
+      add('alerta',G,'Contribuição assistencial prevista e não descontada',
+        'A convenção prevê a contribuição incidindo na rescisão e nenhum desconto foi lançado.',
+        null,null,'Cláusula de contribuição assistencial da convenção.','Confirme se houve oposição formal do empregado.');
+
+    /* adicional de horas extras */
+    if(cct.adicionais&&cct.adicionais.he>0){
+      var hes=rubs(d,/HORA[S]?\s*EXTRA/,'P'), menor=null;
+      for(var q=0;q<hes.length;q++){
+        var pc=/(\d{2,3})\s*%/.exec(hes[q].nome);
+        if(pc&&(menor==null||+pc[1]<menor)) menor=+pc[1];
+      }
+      if(menor!=null){
+        if(menor<cct.adicionais.he)
+          add('erro',G,'Hora extra abaixo do adicional da convenção',
+            'Rubrica lançada com '+menor+'% e a convenção garante '+cct.adicionais.he+'%.',menor,cct.adicionais.he,
+            'Art. 7º, XVI, CF/88 (mínimo 50%) + cláusula de horas extras da convenção.',
+            'Refaça as horas extras e as médias que elas alimentam.',0.5);
+        else add('ok',G,'Adicional de horas extras','Lançado '+menor+'%, convenção exige '+cct.adicionais.he+'%.',menor,menor);
+        un('perc'); rr(cods(hes));
+      }
+    }
+
+    /* homologação no sindicato */
+    if(cct.homologacao&&cct.homologacao.obrigatoria&&d.admissao&&d.demissao){
+      var mesesCasa=(d.demissao.getUTCFullYear()-d.admissao.getUTCFullYear())*12+(d.demissao.getUTCMonth()-d.admissao.getUTCMonth());
+      if(d.demissao.getUTCDate()<d.admissao.getUTCDate()) mesesCasa--;
+      if(mesesCasa>=cct.homologacao.mesesMin)
+        add('alerta',G,'Rescisão sujeita a homologação',
+          'Contrato de '+mesesCasa+' meses e a convenção exige assistência do '+(cct.homologacao.local||'sindicato')+
+          ' a partir de '+cct.homologacao.mesesMin+' meses.',
+          null,null,'Art. 477, §1º CLT foi revogado em 2017, mas a convenção pode reinstituir a assistência (art. 611-A CLT).',
+          'Agende a homologação antes de pagar, ou o pagamento pode não gerar quitação.');
+    }
+
+    /* estabilidade pré-aposentadoria */
+    if(cct.estabilidade&&cct.estabilidade.preAposMeses>0&&(d.motivo==='sjc')&&d.aposentadoria&&d.admissao&&d.demissao){
+      var anosCasa=anosContrato(d);
+      var janela=addMeses(d.aposentadoria,-cct.estabilidade.preAposMeses);
+      if(anosCasa>=(cct.estabilidade.preAposAnosCasa||0)&&d.demissao>=janela&&d.demissao<=d.aposentadoria)
+        add('erro',G,'Dispensa dentro da estabilidade pré-aposentadoria',
+          'Aposentadoria prevista para '+fd(d.aposentadoria)+'; a convenção garante emprego nos '+cct.estabilidade.preAposMeses+
+          ' meses anteriores (a partir de '+fd(janela)+') para quem tem '+(cct.estabilidade.preAposAnosCasa||0)+'+ anos de casa. Este contrato tem '+anosCasa+'.',
+          null,null,'Cláusula de garantia de emprego pré-aposentadoria da convenção coletiva.',
+          'A dispensa é nula: reintegre ou pague os salários do período de garantia.');
+    }
+
+    /* desconto de alimentação */
+    if(cct.beneficios&&cct.beneficios.descontoAlimMaxPerc>0&&sal>0){
+      var alim=rubs(d,/VALE\s*(REFEI|ALIMENT)|CESTA|REFEI[CÇ][AÃ]O/,'D');
+      if(alim.length){
+        var vAl=soma(alim), limAl=r2(sal*cct.beneficios.descontoAlimMaxPerc/100);
+        if(vAl>limAl+0.02){
+          add('erro',G,'Desconto de alimentação acima do teto da convenção',
+            'Descontado '+mo(vAl)+', teto de '+cct.beneficios.descontoAlimMaxPerc+'% = '+mo(limAl)+'.',vAl,limAl,
+            'Cláusula de alimentação da convenção coletiva.','');
+          rr(cods(alim));
+        }
+      }
+    }
+
+    /* cláusulas livres — checklist de conferência manual */
+    for(var z=0;z<cct.livres.length;z++){
+      var cl=cct.livres[z];
+      if(!cl||!cl.texto) continue;
+      add(cl.tipo==='informativo'?'info':'alerta',G,
+        (cl.titulo||'Cláusula da convenção')+(cl.tipo==='informativo'?'':' — conferir manualmente'),
+        cl.texto,null,null,cct.nome,
+        cl.tipo==='informativo'?'':'Esta cláusula não tem conferência automática. Verifique no cálculo antes de fechar.');
+    }
+  }
+
+  /* ---- G. fechamento ---- */
+  G='Fechamento';
+  var somaP=0,somaD=0;
+  for(i=0;i<d.rubricas.length;i++){ if(d.rubricas[i].tipo==='P') somaP+=d.rubricas[i].valor; else somaD+=d.rubricas[i].valor; }
+  somaP=r2(somaP);somaD=r2(somaD);
+  if(d.totalP!=null) cmp('erro',G,'Total de proventos',d.totalP,somaP,'Soma das rubricas de provento.','Conferência aritmética','Se divergir, alguma rubrica foi classificada no lado errado na leitura.',0.05);
+  if(d.totalD!=null) cmp('erro',G,'Total de descontos',d.totalD,somaD,'Soma das rubricas de desconto.','Conferência aritmética','',0.05);
+  if(d.liquido!=null) cmp('erro',G,'Líquido da rescisão',d.liquido,r2((d.totalP!=null?d.totalP:somaP)-(d.totalD!=null?d.totalD:somaD)),'Bruto − descontos.','Conferência aritmética','',0.05);
+
+  return {findings:F, classes:C, regra:reg, diasAvisoDevidos:diasDev, fimContagem:fimContagem};
+}
+
+function anosContrato(d){
+  if(!d.admissao) return 0;
+  var fim=d.dataAviso||d.demissao; if(!fim) return 0;
+  var a=0, marco=addMeses(d.admissao,12);
+  while(marco<=fim){a++;marco=addMeses(marco,12);}
+  return a;
+}
+
+/* ================================ UI =================================== */
+var ATUAL=null, RES=null, FILTRO='prob';
+
+function renderTudo(d){
+  ATUAL=d;
+  RES=auditar(d);
+  renderVerdict(d,RES);
+  renderTimeline(d,RES);
+  renderCalculo(d,RES);
+  renderAchados(d,RES);
+  $('#telaEntrada').hidden=true;
+  $('#telaResultado').hidden=false;
+  $('#btNovo').hidden=false;
+  $('#btPrint').hidden=false;
+  return RES;
+}
+
+function contagem(F){
+  var c={erro:0,alerta:0,ok:0,info:0,impacto:0,semValor:0};
+  for(var i=0;i<F.length;i++){
+    var f=F[i];
+    c[f.sev]++;
+    if(f.sev!=='erro'||!f.dif) continue;
+    /* dias, avos e percentuais não são dinheiro — não entram na soma */
+    if((f.un||'brl')==='brl') c.impacto+=f.dif; else c.semValor++;
+  }
+  c.impacto=r2(c.impacto);
+  return c;
+}
+/* formata o par declarado × esperado conforme a unidade do achado */
+function valorUn(v,un){
+  if(v==null) return '—';
+  if(un==='dias') return plural(Math.round(v),'dia','dias');
+  if(un==='avos') return Math.round(v)+'/12';
+  if(un==='perc') return String(Math.round(v*100)/100).replace('.',',')+'%';
+  return mo(v);
+}
+
+function renderVerdict(d,res){
+  var c=contagem(res.findings), total=c.erro+c.alerta+c.ok;
+  var estado = c.erro?'reprovado' : (c.alerta?'atencao':'aprovado');
+  var titulo = c.erro? plural(c.erro,'divergência','divergências')
+             : (c.alerta? plural(c.alerta,'ponto de atenção','pontos de atenção') : 'Cálculo conforme');
+  var sub    = c.erro? (c.erro===1?'que precisa de correção antes de fechar':'que precisam de correção antes de fechar')
+             : (c.alerta? 'nenhum erro, mas confira estes itens' : 'nenhuma divergência encontrada');
+  var icone  = c.erro?'erro':(c.alerta?'alerta':'escudo');
+
+  var chips='';
+  chips+='<span class="chip">'+esc(res.regra.nome)+'</span>';
+  chips+='<span class="chip">'+esc(AVISO_LABEL[d.tipoAviso]||'')+'</span>';
+  if(d.salario) chips+='<span class="chip">Salário R$ '+mo(d.salario)+'</span>';
+  if(d.admissao&&d.demissao) chips+='<span class="chip">'+tempoCasa(d)+' de casa</span>';
+  var cctSel=d.cctId?cctPorId(d.cctId):null;
+  chips+='<span class="chip"'+(cctSel?'':' style="color:var(--alerta-tx)"')+'>'+
+         (cctSel?esc(cctSel.nome):'Sem convenção coletiva')+'</span>';
+
+  var h='<div class="verdict-in">';
+  h+='<div class="selo '+estado+'">'+ico(icone)+'<div><b>'+esc(titulo)+'</b><span>'+esc(sub)+'</span></div></div>';
+  h+='<div class="impacto"><label>Impacto apurado</label>'+
+     '<b style="color:'+(c.impacto>0.005?'var(--ok-tx)':(c.impacto<-0.005?'var(--erro-tx)':'var(--tx)'))+'">'+
+     (c.impacto>0.005?'+ ':(c.impacto<-0.005?'− ':''))+'R$ '+mo(Math.abs(c.impacto))+'</b>'+
+     '<small>'+(c.impacto>0.005?'a pagar a mais ao empregado':(c.impacto<-0.005?'pago a mais pela empresa':'nenhuma diferença em dinheiro'))+
+     (c.semValor?' · '+plural(c.semValor,'erro','erros')+' de dias/avos ainda por valorar':'')+'</small></div>';
+  h+='<div class="quem"><b>'+esc(d.nome||'Empregado não identificado')+'</b>'+
+     '<span>'+esc(d.cargo||'')+(d.cargo&&d.empresa?' · ':'')+esc(d.empresa||'')+'</span>'+
+     '<div class="chips">'+chips+'</div></div>';
+  h+='</div>';
+
+  if(total){
+    var pe=c.erro/total*100, pa=c.alerta/total*100, po=c.ok/total*100;
+    h+='<div class="barra" role="img" aria-label="'+c.erro+' erros, '+c.alerta+' alertas, '+c.ok+' conferidos">'+
+       '<i class="e" style="width:'+pe+'%"></i><i class="a" style="width:'+pa+'%"></i><i class="o" style="width:'+po+'%"></i></div>';
+    h+='<div class="legenda">'+
+       '<span><i style="background:var(--erro)"></i>'+c.erro+' com erro</span>'+
+       '<span><i style="background:var(--alerta)"></i>'+c.alerta+' a conferir</span>'+
+       '<span><i style="background:var(--ok)"></i>'+c.ok+' conferidos e corretos</span>'+
+       '<span style="color:var(--tx3)">'+total+' verificações no total</span></div>';
+  }
+  $('#verdict').innerHTML=h;
+}
+
+function tempoCasa(d){
+  var a=anosContrato(d), fim=d.demissao, ini=d.admissao;
+  if(!ini||!fim) return '';
+  var meses=(fim.getUTCFullYear()-ini.getUTCFullYear())*12+(fim.getUTCMonth()-ini.getUTCMonth());
+  if(fim.getUTCDate()<ini.getUTCDate()) meses--;
+  if(meses<12) return plural(Math.max(meses,0),'mês','meses');
+  var m=meses%12;
+  return plural(a,'ano','anos')+(m?' e '+plural(m,'mês','meses'):'');
+}
+
+/* distância entre duas datas em linguagem natural */
+function vao(a,b){
+  var dias=difDias(a,b);
+  if(dias<45) return plural(dias,'dia','dias');
+  var m=(b.getUTCFullYear()-a.getUTCFullYear())*12+(b.getUTCMonth()-a.getUTCMonth());
+  if(b.getUTCDate()<a.getUTCDate()) m--;
+  if(m<12) return plural(m,'mês','meses');
+  var an=Math.floor(m/12), r=m%12;
+  return plural(an,'ano','anos')+(r?' e '+plural(r,'mês','meses'):'');
+}
+
+function renderTimeline(d,res){
+  var nos=[];
+  function no(rot,data,mk,nota){ if(data) nos.push({rot:rot,dt:data,mk:mk||'',nota:nota||''}); }
+
+  no('Admissão',d.admissao,'mk-ok');
+  if(d.dataAviso&&d.demissao&&difDias(d.dataAviso,d.demissao)===0){
+    no('Aviso e afastamento',d.demissao,'mk-ok');
+  } else {
+    no('Aviso',d.dataAviso,'mk-ok');
+    no('Afastamento',d.demissao,'mk-ok');
+  }
+
+  if(d.tipoAviso==='indenizado'&&d.projecao&&d.demissao){
+    var projEsp=addDias(d.demissao,res.diasAvisoDevidos);
+    var projOk=difDias(projEsp,d.projecao)===0;
+    no('Fim projetado',d.projecao,projOk?'mk-brand':'mk-erro',
+       projOk? plural(difDias(d.demissao,d.projecao),'dia','dias')+' de aviso · gera avos'
+             : 'esperado '+fd(projEsp));
+  }
+  var limite=null,atraso=0;
+  if(d.pagamento&&d.demissao){
+    limite=addDias(d.demissao,prazoPagamento(d.cctId?cctPorId(d.cctId):null));
+    atraso=difDias(limite,d.pagamento);
+    no('Pagamento',d.pagamento,atraso>0?'mk-erro':'mk-ok',
+       atraso>0?plural(atraso,'dia','dias')+' de atraso · limite '+fd(limite):'no prazo · limite '+fd(limite));
+  }
+
+  if(nos.length<2){ $('#timeline').hidden=true; return; }
+
+  /* a projeção do aviso pode ultrapassar a data de pagamento — ordena por data */
+  nos.sort(function(a,b){return a.dt-b.dt;});
+  $('#timeline').hidden=false;
+
+  var h='<div class="tl-in"><div class="tl">';
+  for(var i=0;i<nos.length;i++){
+    if(i>0){
+      var a=nos[i-1], b=nos[i], cls='';
+      /* trecho dentro da projeção do aviso indenizado */
+      if(d.projecao&&d.demissao&&d.tipoAviso==='indenizado'&&a.dt>=d.demissao&&b.dt<=d.projecao) cls='proj';
+      if(b.rot==='Pagamento'&&atraso>0) cls='ruim';
+      var txt = difDias(a.dt,b.dt)===0 ? 'mesmo dia' : vao(a.dt,b.dt);
+      h+='<div class="tl-lig '+cls+'"><b>'+esc(txt)+'</b></div>';
+    }
+    h+='<div class="tl-no '+nos[i].mk+'"><b>'+esc(fd(nos[i].dt))+'</b><span>'+esc(nos[i].rot)+'</span>'+
+       (nos[i].nota?'<em>'+esc(nos[i].nota)+'</em>':'')+'</div>';
+  }
+  h+='</div></div>';
+  $('#timeline').innerHTML=h;
+}
+
+function renderAchados(d,res){
+  var F=res.findings, c=contagem(F);
+  $('#contAchados').textContent='· '+(c.erro+c.alerta)+' de '+F.length;
+
+  var ordem={erro:0,alerta:1,info:2,ok:3}, grupos={}, ordG=[];
+  var sorted=F.slice().sort(function(a,b){return ordem[a.sev]-ordem[b.sev];});
+  for(var i=0;i<sorted.length;i++){
+    var g=sorted[i].grupo;
+    if(!grupos[g]){grupos[g]=[];ordG.push(g);}
+    grupos[g].push(sorted[i]);
+  }
+  var h='';
+  for(var gi=0;gi<ordG.length;gi++){
+    var lst=grupos[ordG[gi]], ce=0;
+    for(i=0;i<lst.length;i++) if(lst[i].sev==='erro'||lst[i].sev==='alerta') ce++;
+    h+='<div class="grupo" data-g="'+esc(ordG[gi])+'"><b>'+esc(ordG[gi])+'</b><i></i>'+
+       '<em>'+lst.length+'</em></div>';
+    for(i=0;i<lst.length;i++) h+=cardAchado(lst[i]);
+  }
+  $('#achBody').innerHTML=h||'<div class="vazio">Nada a mostrar.</div>';
+  ligarAchados();
+  aplicaFiltro(FILTRO);
+}
+
+function cardAchado(f){
+  var rubs=f.rubs&&f.rubs.length?' data-rubs="'+f.rubs.join(',')+'" tabindex="0" role="button"':'';
+  var h='<article class="find '+f.sev+'"'+rubs+' data-sev="'+f.sev+'">';
+  h+='<div class="find-h"><span class="sev '+f.sev+'">'+ico(f.sev==='erro'?'erro':f.sev==='alerta'?'alerta':f.sev==='ok'?'ok':'info')+'</span>'+
+     '<h3>'+esc(f.titulo)+'</h3></div>';
+  if(f.txt) h+='<p>'+esc(f.txt)+'</p>';
+  var mostraCmp = f.dec!=null&&f.esp!=null&&!(f.sev==='ok'&&f.dec===f.esp&&f.dec===0);
+  if(mostraCmp){
+    var u=f.un||'brl', temDif=f.dif!=null&&Math.abs(f.dif)>0.001;
+    h+='<div class="cmp">'+
+       '<div><label>No cálculo</label><b>'+valorUn(f.dec,u)+'</b></div>'+
+       '<div><label>Deveria ser</label><b>'+valorUn(f.esp,u)+'</b></div>'+
+       '<div class="dif'+(temDif&&f.dif<0?' neg':'')+'"><label>Diferença</label><b'+(temDif?'':' style="color:var(--tx3)"')+'>'+
+       (temDif?(f.dif>0?'+':'−')+valorUn(Math.abs(f.dif),u):'—')+'</b></div>'+
+       '</div>';
+  }
+  if(f.fix) h+='<p class="fix"><b>Como corrigir:</b> '+esc(f.fix)+'</p>';
+  if(f.lei) h+='<div class="lei">'+esc(f.lei)+'</div>';
+  h+='</article>';
+  return h;
+}
+
+function ligarAchados(){
+  $$('#achBody .find[data-rubs]').forEach(function(n){
+    function ativa(){
+      $$('#achBody .find.sel').forEach(function(x){x.classList.remove('sel');});
+      n.classList.add('sel');
+      destacar(n.getAttribute('data-rubs').split(','));
+    }
+    n.addEventListener('click',ativa);
+    n.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();ativa();} });
+  });
+}
+
+function destacar(codigos){
+  var primeiro=null;
+  $$('#confBody tr[data-cod]').forEach(function(tr){
+    var on=codigos.indexOf(tr.getAttribute('data-cod'))>=0;
+    tr.classList.toggle('hl',on);
+    if(on&&!primeiro) primeiro=tr;
+  });
+  if(primeiro&&primeiro.scrollIntoView) primeiro.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
+function aplicaFiltro(f){
+  FILTRO=f;
+  var permite = f==='tudo'?null : (f==='erro'?['erro']:['erro','alerta']);
+  $$('#filtros button').forEach(function(b){
+    b.setAttribute('aria-pressed', b.getAttribute('data-f')===f ? 'true':'false');
+  });
+  $$('#achBody .find').forEach(function(n){
+    n.style.display=(!permite||permite.indexOf(n.getAttribute('data-sev'))>=0)?'':'none';
+  });
+  $$('#achBody .grupo').forEach(function(t){
+    var n=t.nextElementSibling, vis=false;
+    while(n&&n.classList.contains('find')){ if(n.style.display!=='none') vis=true; n=n.nextElementSibling; }
+    t.style.display=vis?'':'none';
+  });
+  var algum=false;
+  $$('#achBody .find').forEach(function(n){ if(n.style.display!=='none') algum=true; });
+  var v=$('#achVazio');
+  if(!algum){
+    if(!v){ v=el('div','vazio'); v.id='achVazio'; $('#achBody').appendChild(v); }
+    v.textContent = f==='erro' ? 'Nenhum erro encontrado neste cálculo.' : 'Nada pendente — tudo conferido.';
+    v.style.display='';
+  } else if(v) v.style.display='none';
+}
+
+/* ------------------------- coluna do cálculo ---------------------------- */
+function renderCalculo(d,res){
+  var h='';
+
+  /* contrato + ajustes */
+  h+='<div class="card"><h3>Contrato</h3><div class="card-body"><div class="kvs">'+
+     kv('Admissão',fd(d.admissao),1)+kv('Afastamento',fd(d.demissao),1)+
+     kv('Aviso',fd(d.dataAviso),1)+kv('Projeção',fd(d.projecao),1)+
+     kv('Pagamento',fd(d.pagamento),1)+kv('Salário base',mo(d.salario),1)+
+     '</div>'+
+     '<div style="margin-top:14px"><label for="selCct">Convenção coletiva aplicável</label>'+
+     seletorCct(d)+'</div>'+
+     '</div>'+
+     '<details class="ajustes"><summary>Ajustar premissas e recalcular</summary><div class="form">'+
+     campoSel('fMotivo','Motivo',MOTIVOS,d.motivo)+
+     campoSel('fAviso','Aviso prévio',AVISO_LABEL,d.tipoAviso)+
+     campo('fSal','Salário base',mo(d.salario))+
+     campo('fNasc','Nascimento',d.nascimento?fd(d.nascimento):'')+
+     campo('fAdm','Admissão',d.admissao?fd(d.admissao):'')+
+     campo('fAvd','Data do aviso',d.dataAviso?fd(d.dataAviso):'')+
+     campo('fDem','Afastamento',d.demissao?fd(d.demissao):'')+
+     campo('fPag','Pagamento',d.pagamento?fd(d.pagamento):'')+
+     '<div class="full"><button class="btn primary" id="bRecalc">Recalcular</button></div>'+
+     '</div></details></div>';
+
+  /* rubricas */
+  h+='<div class="card"><h3>Rubricas lançadas · '+d.rubricas.length+'</h3>'+
+     '<table><thead><tr><th>Rubrica</th><th class="n">Ref.</th><th class="n">Provento</th><th class="n">Desconto</th></tr></thead><tbody>';
+  var sp=0,sd=0, grupoAtual='';
+  for(var i=0;i<d.rubricas.length;i++){
+    var r=d.rubricas[i];
+    if(r.tipo==='P')sp+=r.valor;else sd+=r.valor;
+    h+='<tr data-cod="'+esc(r.cod)+'">'+
+       '<td class="nm">'+esc(r.nome)+'<br><span class="cod">'+esc(r.cod)+' · '+esc(r.grupo||'—')+'</span></td>'+
+       '<td class="n">'+esc(r.ref)+'</td>'+
+       '<td class="n">'+(r.tipo==='P'?mo(r.valor):'')+'</td>'+
+       '<td class="n">'+(r.tipo==='D'?mo(r.valor):'')+'</td></tr>';
+  }
+  h+='<tr class="tot"><td>Totais</td><td></td><td class="n">'+mo(sp)+'</td><td class="n">'+mo(sd)+'</td></tr>';
+  h+='<tr class="tot"><td>Líquido da rescisão</td><td></td><td class="n" colspan="2">'+mo(sp-sd)+'</td></tr>';
+  h+='</tbody></table></div>';
+
+  /* bases */
+  var mostrar=['Saldo FGTS','Base FGTS Mensal','FGTS Mensal','Base FGTS 13º','FGTS 13º',
+    'Base FGTS Aviso Prévio','FGTS Aviso Prévio','FGTS 40%','FGTS 20%',
+    'Base INSS Mensal','Base INSS 13º Salário','Base IRRF Mensal','Base IRRF 13º Salário'];
+  var bh='';
+  for(i=0;i<mostrar.length;i++) if(d.bases[mostrar[i]]!=null) bh+=kv(mostrar[i],mo(d.bases[mostrar[i]]),1);
+  if(bh) h+='<div class="card"><h3>Bases declaradas</h3><div class="card-body"><div class="kvs">'+bh+'</div></div></div>';
+
+  /* férias */
+  if(d.ferias.length){
+    h+='<div class="card"><h3>Períodos aquisitivos de férias</h3>'+
+       '<table><thead><tr><th>Período</th><th class="n">Dias</th><th class="n">Faltas</th><th class="n">Direito</th></tr></thead><tbody>';
+    for(i=0;i<d.ferias.length;i++){
+      var pf=d.ferias[i], dir=diasFeriasPorFaltas(pf.faltas);
+      h+='<tr><td class="nm">'+fd(pf.ini)+' a '+fd(pf.fim)+'</td><td class="n">'+mo(pf.dias)+'</td>'+
+         '<td class="n">'+pf.faltas+'</td><td class="n"'+(dir<30?' style="color:var(--alerta-tx)"':'')+'>'+dir+' d</td></tr>';
+    }
+    h+='</tbody></table></div>';
+  }
+
+  $('#confBody').innerHTML=h;
+  $('#bRecalc').onclick=recalcular;
+  var sc=$('#selCct');
+  if(sc) sc.onchange=function(){
+    if(sc.value==='__nova'){ sc.value=ATUAL.cctId||''; abrirConvencoes(); return; }
+    ATUAL.cctId=sc.value||null;
+    lembrarCct(ATUAL);
+    renderTudo(ATUAL);
+  };
+}
+function seletorCct(d){
+  var h='<select id="selCct"><option value="">— nenhuma (só CLT) —</option>';
+  for(var i=0;i<CCTS.length;i++){
+    var c=CCTS[i], fora=!cctVigente(c,d.demissao);
+    h+='<option value="'+esc(c.id)+'"'+(c.id===d.cctId?' selected':'')+'>'+
+       esc(c.nome||'(sem nome)')+(c.vigIni||c.vigFim?' · '+(c.vigIni||'?')+' a '+(c.vigFim||'?'):'')+
+       (fora?' ⚠ fora de vigência':'')+'</option>';
+  }
+  return h+'<option value="__nova">＋ cadastrar convenção…</option></select>';
+}
+/* lembra a convenção escolhida por CNPJ da empresa */
+function lembrarCct(d){
+  if(!d.cnpj) return;
+  try{
+    var m=JSON.parse(localStorage.getItem('mxresc_cct_empresa')||'{}');
+    if(d.cctId) m[d.cnpj]=d.cctId; else delete m[d.cnpj];
+    localStorage.setItem('mxresc_cct_empresa',JSON.stringify(m));
+  }catch(e){}
+}
+function cctSugerida(d){
+  var m={};
+  try{ m=JSON.parse(localStorage.getItem('mxresc_cct_empresa')||'{}'); }catch(e){}
+  if(d.cnpj&&m[d.cnpj]&&cctPorId(m[d.cnpj])) return m[d.cnpj];
+  /* só uma convenção cadastrada e vigente na data → usa ela */
+  var vig=[];
+  for(var i=0;i<CCTS.length;i++) if(cctVigente(CCTS[i],d.demissao)) vig.push(CCTS[i]);
+  return vig.length===1?vig[0].id:null;
+}
+function kv(k,v,mono){
+  return '<div class="kv"><label>'+esc(k)+'</label><b'+(mono?' class="mono"':'')+'>'+esc(v)+'</b></div>';
+}
+function campo(id,rot,val){
+  return '<div><label for="'+id+'">'+esc(rot)+'</label><input id="'+id+'" value="'+esc(val)+'"></div>';
+}
+function campoSel(id,rot,mapa,sel){
+  var h='<div><label for="'+id+'">'+esc(rot)+'</label><select id="'+id+'">';
+  for(var k in mapa){
+    var nome = typeof mapa[k]==='string'?mapa[k]:mapa[k].nome;
+    h+='<option value="'+k+'"'+(k===sel?' selected':'')+'>'+esc(nome)+'</option>';
+  }
+  return h+'</select></div>';
+}
+
+function recalcular(){
+  if(!ATUAL) return;
+  ATUAL.motivo=$('#fMotivo').value;
+  ATUAL.tipoAviso=$('#fAviso').value;
+  ATUAL.salario=nb($('#fSal').value)||ATUAL.salario;
+  ATUAL.nascimento=pd($('#fNasc').value);
+  ATUAL.admissao=pd($('#fAdm').value)||ATUAL.admissao;
+  ATUAL.dataAviso=pd($('#fAvd').value);
+  ATUAL.demissao=pd($('#fDem').value)||ATUAL.demissao;
+  ATUAL.pagamento=pd($('#fPag').value);
+  renderTudo(ATUAL);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ------------------------------- drawer --------------------------------- */
+var MODO='tabelas', EDITANDO=null;
+
+function abrirDrawer(modo){
+  MODO=modo||'tabelas';
+  pintarDrawer();
+  $('#scrim').hidden=false; $('#drawer').hidden=false;
+  $('#btFecharDrawer').focus();
+  document.body.style.overflow='hidden';
+}
+function abrirConvencoes(){ EDITANDO=null; abrirDrawer('convencoes'); }
+function pintarDrawer(){
+  var t=$('#drawerTitulo');
+  if(MODO==='tabelas'){ t.textContent='Tabelas & regras'; $('#drawerBody').innerHTML=htmlTabelas(); ligarDrawer(); }
+  else if(MODO==='convencoes'){ t.textContent='Convenções coletivas'; $('#drawerBody').innerHTML=htmlListaCct(); ligarListaCct(); }
+  else { t.textContent=EDITANDO&&EDITANDO.nome?EDITANDO.nome:'Nova convenção'; $('#drawerBody').innerHTML=htmlEditorCct(); ligarEditorCct(); }
+  $('#drawerBody').scrollTop=0;
+}
+function fecharDrawer(){
+  if(MODO==='tabelas'){ lerTabelas(); salvarCfg(); }
+  if(MODO==='cctEditor'){ MODO='convencoes'; pintarDrawer(); return; }   // volta à lista
+  $('#scrim').hidden=true; $('#drawer').hidden=true;
+  document.body.style.overflow='';
+  if(ATUAL) renderTudo(ATUAL);
+  $('#btTabelas').focus();
+}
+function htmlTabelas(){
+  var h='';
+  h+='<div class="aviso"><b>Confira antes de usar.</b> Só a 1ª faixa do INSS (R$ 1.621,73 a 7,5%) foi confirmada '+
+     'a partir dos cálculos reais que serviram de calibração. As demais faixas e a tabela do IRRF são estimativas — '+
+     'por isso as conferências de INSS e IRRF saem como <b>atenção</b>, nunca como erro.</div>';
+
+  h+='<div class="card"><h3>INSS — tabela progressiva</h3>'+
+     '<table><thead><tr><th>Até (R$)</th><th class="n">Alíquota %</th><th></th></tr></thead><tbody>';
+  CFG.inss.forEach(function(f,ix){
+    h+='<tr><td><input value="'+mo(f.ate)+'" data-t="inss" data-i="'+ix+'" data-c="ate" aria-label="Limite da faixa '+(ix+1)+'"></td>'+
+       '<td class="n"><input value="'+String(f.aliq).replace('.',',')+'" data-t="inss" data-i="'+ix+'" data-c="aliq" aria-label="Alíquota da faixa '+(ix+1)+'"></td>'+
+       '<td><button class="btn icon" data-del="inss" data-i="'+ix+'" aria-label="Remover faixa">'+ico('fechar')+'</button></td></tr>';
+  });
+  h+='</tbody></table><div class="card-body"><button class="btn" id="bAddInss">Adicionar faixa</button></div></div>';
+
+  h+='<div class="card"><h3>IRRF — tabela mensal</h3>'+
+     '<table><thead><tr><th>Até (R$)</th><th class="n">%</th><th class="n">Deduzir</th><th></th></tr></thead><tbody>';
+  CFG.irrf.forEach(function(f,ix){
+    h+='<tr><td><input value="'+(f.ate?mo(f.ate):'acima')+'" data-t="irrf" data-i="'+ix+'" data-c="ate" aria-label="Limite da faixa '+(ix+1)+'"></td>'+
+       '<td class="n"><input value="'+String(f.aliq).replace('.',',')+'" data-t="irrf" data-i="'+ix+'" data-c="aliq" aria-label="Alíquota da faixa '+(ix+1)+'"></td>'+
+       '<td class="n"><input value="'+mo(f.ded)+'" data-t="irrf" data-i="'+ix+'" data-c="ded" aria-label="Parcela a deduzir da faixa '+(ix+1)+'"></td>'+
+       '<td><button class="btn icon" data-del="irrf" data-i="'+ix+'" aria-label="Remover faixa">'+ico('fechar')+'</button></td></tr>';
+  });
+  h+='</tbody></table><div class="card-body"><button class="btn" id="bAddIrrf">Adicionar faixa</button>'+
+     '<div class="form" style="padding:16px 0 0">'+
+     campo('cDep','Dedução por dependente',mo(CFG.dep))+
+     campo('cSimp','Desconto simplificado',mo(CFG.simp))+
+     campo('cIsen','Isenção total até',mo(CFG.isencao))+
+     '</div></div></div>';
+
+  h+='<div class="card"><h3>Outros parâmetros</h3><div class="form" style="padding:16px">'+
+     campo('cFgts','FGTS mensal %',String(CFG.fgts).replace('.',','))+
+     campo('cMulta','Multa rescisória %',String(CFG.multa).replace('.',','))+
+     campo('cHoras','Jornada mensal (horas)',String(CFG.horasMes).replace('.',','))+
+     campo('cPrazo','Prazo de pagamento (dias)',String(CFG.prazoPgto))+
+     '<div class="full"><button class="btn" id="bResetCfg">Restaurar padrão</button></div>'+
+     '</div></div>';
+
+  /* matriz */
+  var ms=['sjc','pedido','acordo','justacausa','termino'];
+  h+='<div class="card"><h3>O que é devido em cada motivo</h3>'+
+     '<div style="overflow-x:auto"><table><thead><tr><th>Verba</th>';
+  for(var i=0;i<ms.length;i++) h+='<th>'+esc(MOTIVOS[ms[i]].nome.replace('Dispensa ','').replace('Término de contrato determinado','Contrato determinado'))+'</th>';
+  h+='</tr></thead><tbody>';
+  var linhas=[
+    ['Saldo de salário',function(){return 'Devido';}],
+    ['Aviso prévio',function(k){return {empregador:'Pago ao empregado',empregado:'Descontado dele',metade:'Metade',nenhum:'Não se aplica'}[MOTIVOS[k].aviso];}],
+    ['13º proporcional',function(k){return MOTIVOS[k].d13?'Devido':'Indevido';}],
+    ['Férias proporcionais + 1/3',function(k){return MOTIVOS[k].feriasProp?'Devidas':'Indevidas';}],
+    ['Férias vencidas + 1/3',function(){return 'Devidas';}],
+    ['Multa do FGTS',function(k){return MOTIVOS[k].multa?MOTIVOS[k].multa+'%':'Não';}],
+    ['Saque do FGTS',function(k){return MOTIVOS[k].saque;}],
+    ['Seguro-desemprego',function(k){return MOTIVOS[k].seguro?'Sim':'Não';}]
+  ];
+  for(i=0;i<linhas.length;i++){
+    h+='<tr><td class="nm">'+esc(linhas[i][0])+'</td>';
+    for(var j=0;j<ms.length;j++){
+      var v=linhas[i][1](ms[j]);
+      var cor=/Indevid|^Não$|Não se aplica/.test(v)?'var(--tx3)':'var(--tx)';
+      h+='<td style="color:'+cor+'">'+esc(v)+'</td>';
+    }
+    h+='</tr>';
+  }
+  h+='</tbody></table></div></div>';
+  return h;
+}
+/* ---------------------- convenções: lista e editor ---------------------- */
+function htmlListaCct(){
+  var h='<div class="aviso">Cadastre aqui a convenção (CCT) ou o acordo (ACT) de cada categoria. '+
+    'O que tem campo próprio é conferido automaticamente; o que não tem entra como <b>cláusula livre</b> '+
+    'e vira item de conferência manual no laudo. Convenção nova a cada data-base: use <b>Duplicar</b> e troque a vigência.</div>';
+  h+='<div class="row" style="margin-bottom:14px"><button class="btn primary" id="bNovaCct">Nova convenção</button>'+
+     '<button class="btn" id="bExportCct">Exportar</button>'+
+     '<button class="btn" id="bImportCct">Importar</button></div>';
+  if(!CCTS.length) h+='<div class="vazio">Nenhuma convenção cadastrada. A conferência usa só a CLT.</div>';
+  for(var i=0;i<CCTS.length;i++){
+    var c=CCTS[i], piso=pisoDaFuncao(c,''), n=(c.livres||[]).length;
+    h+='<div class="card"><div class="card-body">'+
+       '<b style="font-size:14.5px">'+esc(c.nome||'(sem nome)')+'</b>'+
+       '<div class="muted" style="margin-top:3px;font-size:12.5px;color:var(--tx2)">'+
+         esc(c.sindicato||'')+(c.sindicato&&c.categoria?' · ':'')+esc(c.categoria||'')+'</div>'+
+       '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">'+
+         '<span class="chip">'+esc(c.vigIni||'?')+' a '+esc(c.vigFim||'?')+'</span>'+
+         (c.dataBase?'<span class="chip">data-base '+esc(c.dataBase)+'</span>':'')+
+         (piso?'<span class="chip">piso '+mo(piso)+'</span>':'')+
+         (c.aviso.diasMin||c.aviso.idadeDias||c.aviso.anosDias?'<span class="chip">aviso ampliado</span>':'')+
+         (n?'<span class="chip">'+plural(n,'cláusula livre','cláusulas livres')+'</span>':'')+
+       '</div>'+
+       '<div class="row" style="margin-top:12px">'+
+         '<button class="btn" data-edit="'+esc(c.id)+'">Editar</button>'+
+         '<button class="btn ghost" data-dup="'+esc(c.id)+'">Duplicar</button>'+
+         '<button class="btn ghost" data-delcct="'+esc(c.id)+'">Excluir</button>'+
+       '</div></div></div>';
+  }
+  h+='<div id="areaTroca"></div>';
+  return h;
+}
+function ligarListaCct(){
+  $('#bNovaCct').onclick=function(){ EDITANDO=normalizarCct({id:novoId()}); MODO='cctEditor'; pintarDrawer(); };
+  $('#bExportCct').onclick=function(){
+    $('#areaTroca').innerHTML='<div class="card"><h3>Exportar</h3><div class="card-body">'+
+      '<p class="muted" style="margin:0 0 8px">Copie o texto abaixo e guarde. Serve para levar o cadastro a outra máquina.</p>'+
+      '<textarea id="txExp" style="min-height:150px" readonly></textarea></div></div>';
+    $('#txExp').value=JSON.stringify(CCTS,null,1);
+    $('#txExp').focus(); $('#txExp').select();
+  };
+  $('#bImportCct').onclick=function(){
+    $('#areaTroca').innerHTML='<div class="card"><h3>Importar</h3><div class="card-body">'+
+      '<p class="muted" style="margin:0 0 8px">Cole o texto exportado. As convenções com o mesmo nome e vigência são substituídas; as demais são acrescentadas.</p>'+
+      '<textarea id="txImp" style="min-height:150px"></textarea>'+
+      '<div class="row" style="margin-top:10px"><button class="btn primary" id="bFazImp">Importar</button></div>'+
+      '<div id="msgImp"></div></div></div>';
+    $('#bFazImp').onclick=function(){
+      var lista;
+      try{ lista=JSON.parse($('#txImp').value); }catch(e){ lista=null; }
+      if(!lista||!lista.length){ $('#msgImp').innerHTML='<div class="msg err">Não consegui ler esse texto como um cadastro de convenções.</div>'; return; }
+      var novas=0, subs=0;
+      for(var i=0;i<lista.length;i++){
+        var c=normalizarCct(lista[i]), achou=-1;
+        for(var j=0;j<CCTS.length;j++) if(CCTS[j].nome===c.nome&&CCTS[j].vigIni===c.vigIni) achou=j;
+        if(achou>=0){ c.id=CCTS[achou].id; CCTS[achou]=c; subs++; }
+        else { c.id=novoId(); CCTS.push(c); novas++; }
+      }
+      salvarCcts(); pintarDrawer();
+    };
+    $('#txImp').focus();
+  };
+  $$('#drawerBody [data-edit]').forEach(function(b){
+    b.onclick=function(){ EDITANDO=cctPorId(b.getAttribute('data-edit')); MODO='cctEditor'; pintarDrawer(); };
+  });
+  $$('#drawerBody [data-dup]').forEach(function(b){
+    b.onclick=function(){
+      var o=cctPorId(b.getAttribute('data-dup'));
+      var c=normalizarCct(JSON.parse(JSON.stringify(o)));
+      c.id=novoId(); c.nome=(o.nome||'')+' (cópia)';
+      CCTS.push(c); salvarCcts(); EDITANDO=c; MODO='cctEditor'; pintarDrawer();
+    };
+  });
+  $$('#drawerBody [data-delcct]').forEach(function(b){
+    b.onclick=function(){
+      var id=b.getAttribute('data-delcct'), c=cctPorId(id);
+      if(!window.confirm('Excluir a convenção "'+(c&&c.nome||'')+'"? Isso não pode ser desfeito.')) return;
+      for(var i=0;i<CCTS.length;i++) if(CCTS[i].id===id){ CCTS.splice(i,1); break; }
+      if(ATUAL&&ATUAL.cctId===id) ATUAL.cctId=null;
+      salvarCcts(); pintarDrawer();
+    };
+  });
+}
+
+function htmlEditorCct(){
+  var c=EDITANDO;
+  function t(id,rot,val,ph){return '<div><label for="'+id+'">'+esc(rot)+'</label><input id="'+id+'" value="'+esc(val==null?'':val)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+'></div>';}
+  function n(id,rot,val,ph){return t(id,rot,val?mo(val):'',ph);}
+  function num(id,rot,val,ph){return '<div><label for="'+id+'">'+esc(rot)+'</label><input id="'+id+'" value="'+(val||'')+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+'></div>';}
+  function chk(id,rot,val){return '<div class="full"><label class="opcao" for="'+id+'" style="display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--tx);cursor:pointer;margin:0">'+
+    '<input type="checkbox" id="'+id+'"'+(val?' checked':'')+' style="width:20px;min-height:20px;flex:none">'+esc(rot)+'</label></div>';}
+
+  var h='<div class="card"><h3>Identificação</h3><div class="form" style="padding:16px">'+
+    '<div class="full">'+t('e_nome','Nome da convenção',c.nome,'CCT Móveis Rio Claro 2026/2027').slice(5)+
+    t('e_sind','Sindicato laboral',c.sindicato)+
+    t('e_cat','Categoria / funções',c.categoria,'Indústria de móveis')+
+    t('e_abr','Abrangência',c.abrangencia,'Rio Claro/SP')+
+    t('e_vi','Vigência — início',c.vigIni,'01/01/2026')+
+    t('e_vf','Vigência — fim',c.vigFim,'31/12/2026')+
+    t('e_db','Data-base (dd/mm)',c.dataBase,'01/01')+
+    '</div></div>';
+
+  h+='<div class="card"><h3>Piso salarial</h3><div class="card-body">'+
+     '<p class="muted" style="margin:0 0 10px;color:var(--tx2);font-size:12.5px">Deixe a função em branco para o piso geral. Com função preenchida, vale quando o cargo do empregado contém esse texto.</p>'+
+     '<table><thead><tr><th>Função (opcional)</th><th class="n">Piso R$</th><th></th></tr></thead><tbody>';
+  for(var i=0;i<c.pisos.length;i++)
+    h+='<tr><td><input data-p="funcao" data-i="'+i+'" value="'+esc(c.pisos[i].funcao||'')+'" aria-label="Função do piso '+(i+1)+'"></td>'+
+       '<td class="n"><input data-p="valor" data-i="'+i+'" value="'+(c.pisos[i].valor?mo(c.pisos[i].valor):'')+'" aria-label="Valor do piso '+(i+1)+'"></td>'+
+       '<td><button class="btn icon" data-delpiso="'+i+'" aria-label="Remover piso">'+ico('fechar')+'</button></td></tr>';
+  h+='</tbody></table><div style="padding-top:12px"><button class="btn" id="bAddPiso">Adicionar piso</button></div></div></div>';
+
+  h+='<div class="card"><h3>Aviso prévio</h3><div class="form" style="padding:16px">'+
+    num('e_avmin','Mínimo de dias',c.aviso.diasMin,'0 = só a regra da lei')+
+    '<div></div>'+
+    num('e_avidm','A partir de que idade',c.aviso.idadeMin,'45')+
+    num('e_avidd','Dias a mais por idade',c.aviso.idadeDias,'0')+
+    num('e_avanm','A partir de quantos anos de casa',c.aviso.anosMin,'10')+
+    num('e_avand','Dias a mais por tempo',c.aviso.anosDias,'0')+
+    chk('e_avveda','A convenção proíbe descontar o aviso não cumprido',c.aviso.vedaDesconto)+
+    '</div></div>';
+
+  h+='<div class="card"><h3>Pagamento e multa</h3><div class="form" style="padding:16px">'+
+    num('e_prazo','Prazo em dias (se menor que 10)',c.pagamento.prazoDias,'0 = usa os 10 da lei')+
+    '<div><label for="e_mtipo">Multa própria por atraso</label><select id="e_mtipo">'+
+      ['nenhuma|Não prevê','salarios|Em salários','dias|Dias de salário por dia de atraso','valor|Valor fixo em R$']
+        .map(function(o){var p=o.split('|');return '<option value="'+p[0]+'"'+(c.pagamento.multaTipo===p[0]?' selected':'')+'>'+p[1]+'</option>';}).join('')+
+      '</select></div>'+
+    num('e_mval','Quantidade / valor da multa',c.pagamento.multaValor,'1')+
+    '<div></div>'+
+    chk('e_mcum','A multa da convenção soma-se à do art. 477, §8º',c.pagamento.multaCumulativa)+
+    chk('e_dbind','Prevê a indenização adicional da data-base (Lei 6.708/79, art. 9º)',c.dataBaseIndeniz)+
+    '</div></div>';
+
+  h+='<div class="card"><h3>Homologação e contribuições</h3><div class="form" style="padding:16px">'+
+    chk('e_homob','Exige homologação assistida',c.homologacao.obrigatoria)+
+    num('e_homm','A partir de quantos meses de contrato',c.homologacao.mesesMin,'12')+
+    t('e_homl','Onde',c.homologacao.local,'sindicato')+
+    chk('e_asprev','Prevê contribuição assistencial / confederativa',c.assistencial.prevista)+
+    num('e_asperc','% sobre o salário',c.assistencial.perc,'1')+
+    n('e_asteto','Teto em R$',c.assistencial.teto)+
+    chk('e_asresc','A contribuição incide também na rescisão',c.assistencial.incideRescisao)+
+    '</div></div>';
+
+  h+='<div class="card"><h3>Adicionais mínimos</h3><div class="form" style="padding:16px">'+
+    num('e_adhe','Hora extra %',c.adicionais.he,'60')+
+    num('e_adnot','Adicional noturno %',c.adicionais.noturno,'20')+
+    num('e_adins','Insalubridade %',c.adicionais.insalub,'')+
+    num('e_adper','Periculosidade %',c.adicionais.pericul,'30')+
+    '</div></div>';
+
+  h+='<div class="card"><h3>Garantias e benefícios</h3><div class="form" style="padding:16px">'+
+    num('e_prem','Estabilidade pré-aposentadoria (meses)',c.estabilidade.preAposMeses,'12')+
+    num('e_prea','Anos de casa exigidos',c.estabilidade.preAposAnosCasa,'5')+
+    num('e_alim','Teto de desconto de alimentação (% do salário)',c.beneficios.descontoAlimMaxPerc,'20')+
+    '</div></div>';
+
+  h+='<div class="card"><h3>Cláusulas livres</h3><div class="card-body">'+
+     '<p class="muted" style="margin:0 0 10px;color:var(--tx2);font-size:12.5px">Tudo o que não tem campo próprio. Cada cláusula vira um item do laudo — '+
+     '<b>conferir</b> aparece como ponto de atenção, <b>informativo</b> só registra.</p>';
+  for(i=0;i<c.livres.length;i++){
+    var l=c.livres[i];
+    h+='<div style="border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;margin-bottom:10px">'+
+       '<div class="form" style="padding:0">'+
+       '<div><label>Título</label><input data-l="titulo" data-i="'+i+'" value="'+esc(l.titulo||'')+'" placeholder="Cláusula 12 — abono de férias"></div>'+
+       '<div><label>Tipo</label><select data-l="tipo" data-i="'+i+'">'+
+         '<option value="conferir"'+(l.tipo!=='informativo'?' selected':'')+'>Conferir no cálculo</option>'+
+         '<option value="informativo"'+(l.tipo==='informativo'?' selected':'')+'>Só informativo</option></select></div>'+
+       '<div class="full"><label>Texto</label><textarea data-l="texto" data-i="'+i+'" style="min-height:80px">'+esc(l.texto||'')+'</textarea></div>'+
+       '<div class="full"><button class="btn ghost" data-dellivre="'+i+'">Remover cláusula</button></div>'+
+       '</div></div>';
+  }
+  h+='<button class="btn" id="bAddLivre">Adicionar cláusula</button></div></div>';
+
+  h+='<div class="card"><div class="form" style="padding:16px">'+
+     '<div class="full"><label for="e_obs">Observações</label><textarea id="e_obs" style="min-height:70px">'+esc(c.obs||'')+'</textarea></div>'+
+     '<div class="full"><button class="btn primary" id="bSalvarCct">Salvar convenção</button> '+
+     '<button class="btn ghost" id="bVoltarCct">Voltar sem salvar</button></div>'+
+     '</div><div id="msgCct" style="padding:0 16px 16px"></div></div>';
+  return h;
+}
+
+function lerEditorCct(){
+  var c=EDITANDO;
+  function v(id){var e=$('#'+id);return e?e.value:'';}
+  function b(id){var e=$('#'+id);return e?!!e.checked:false;}
+  c.nome=v('e_nome'); c.sindicato=v('e_sind'); c.categoria=v('e_cat'); c.abrangencia=v('e_abr');
+  c.vigIni=v('e_vi'); c.vigFim=v('e_vf'); c.dataBase=v('e_db').trim();
+  c.pisos=[];
+  $$('#drawerBody input[data-p]').forEach(function(inp){
+    var i=+inp.getAttribute('data-i');
+    if(!c.pisos[i]) c.pisos[i]={funcao:'',valor:0};
+    if(inp.getAttribute('data-p')==='funcao') c.pisos[i].funcao=inp.value;
+    else c.pisos[i].valor=nb(inp.value);
+  });
+  if(!c.pisos.length) c.pisos=[{funcao:'',valor:0}];
+  c.aviso={diasMin:nb(v('e_avmin')), idadeMin:nb(v('e_avidm')), idadeDias:nb(v('e_avidd')),
+           anosMin:nb(v('e_avanm')), anosDias:nb(v('e_avand')), vedaDesconto:b('e_avveda')};
+  c.pagamento={prazoDias:nb(v('e_prazo')), multaTipo:v('e_mtipo')||'nenhuma',
+               multaValor:nb(v('e_mval')), multaCumulativa:b('e_mcum')};
+  c.dataBaseIndeniz=b('e_dbind');
+  c.homologacao={obrigatoria:b('e_homob'), mesesMin:nb(v('e_homm'))||12, local:v('e_homl')||'sindicato'};
+  c.assistencial={prevista:b('e_asprev'), perc:nb(v('e_asperc')), teto:nb(v('e_asteto')), incideRescisao:b('e_asresc')};
+  c.adicionais={he:nb(v('e_adhe')), noturno:nb(v('e_adnot')), insalub:nb(v('e_adins')), pericul:nb(v('e_adper'))};
+  c.estabilidade={preAposMeses:nb(v('e_prem')), preAposAnosCasa:nb(v('e_prea'))};
+  c.beneficios={descontoAlimMaxPerc:nb(v('e_alim'))};
+  var liv=[];
+  $$('#drawerBody [data-l]').forEach(function(inp){
+    var i=+inp.getAttribute('data-i');
+    if(!liv[i]) liv[i]={titulo:'',texto:'',tipo:'conferir'};
+    liv[i][inp.getAttribute('data-l')]=inp.value;
+  });
+  c.livres=liv.filter(function(x){return x&&x.texto&&x.texto.trim();});
+  c.obs=v('e_obs');
+}
+function ligarEditorCct(){
+  $('#bAddPiso').onclick=function(){ lerEditorCct(); EDITANDO.pisos.push({funcao:'',valor:0}); pintarDrawer(); };
+  $$('#drawerBody [data-delpiso]').forEach(function(x){
+    x.onclick=function(){ lerEditorCct(); EDITANDO.pisos.splice(+x.getAttribute('data-delpiso'),1);
+      if(!EDITANDO.pisos.length) EDITANDO.pisos=[{funcao:'',valor:0}]; pintarDrawer(); };
+  });
+  $('#bAddLivre').onclick=function(){ lerEditorCct(); EDITANDO.livres.push({titulo:'',texto:'',tipo:'conferir'}); pintarDrawer(); };
+  $$('#drawerBody [data-dellivre]').forEach(function(x){
+    x.onclick=function(){ lerEditorCct(); EDITANDO.livres.splice(+x.getAttribute('data-dellivre'),1); pintarDrawer(); };
+  });
+  $('#bVoltarCct').onclick=function(){ MODO='convencoes'; EDITANDO=null; pintarDrawer(); };
+  $('#bSalvarCct').onclick=function(){
+    lerEditorCct();
+    if(!EDITANDO.nome.trim()){ $('#msgCct').innerHTML='<div class="msg err">Dê um nome à convenção.</div>'; $('#e_nome').focus(); return; }
+    var avisos=[];
+    if(EDITANDO.vigIni&&!pd(EDITANDO.vigIni)) avisos.push('início de vigência');
+    if(EDITANDO.vigFim&&!pd(EDITANDO.vigFim)) avisos.push('fim de vigência');
+    if(EDITANDO.dataBase&&!/^\d{1,2}\/\d{1,2}$/.test(EDITANDO.dataBase)) avisos.push('data-base (use dd/mm)');
+    if(avisos.length){ $('#msgCct').innerHTML='<div class="msg err">Confira: '+esc(avisos.join(', '))+'.</div>'; return; }
+    if(!cctPorId(EDITANDO.id)) CCTS.push(EDITANDO);
+    salvarCcts();
+    if(ATUAL&&!ATUAL.cctId){ ATUAL.cctId=EDITANDO.id; lembrarCct(ATUAL); }
+    MODO='convencoes'; EDITANDO=null; pintarDrawer();
+  };
+}
+
+function ligarDrawer(){
+  $('#bAddInss').onclick=function(){lerTabelas();CFG.inss.push({ate:0,aliq:0});$('#drawerBody').innerHTML=htmlTabelas();ligarDrawer();};
+  $('#bAddIrrf').onclick=function(){lerTabelas();CFG.irrf.push({ate:0,aliq:0,ded:0});$('#drawerBody').innerHTML=htmlTabelas();ligarDrawer();};
+  $('#bResetCfg').onclick=function(){CFG=JSON.parse(JSON.stringify(CFG_PADRAO));salvarCfg();$('#drawerBody').innerHTML=htmlTabelas();ligarDrawer();};
+  $$('#drawerBody [data-del]').forEach(function(b){
+    b.onclick=function(){
+      lerTabelas();
+      CFG[b.getAttribute('data-del')].splice(+b.getAttribute('data-i'),1);
+      $('#drawerBody').innerHTML=htmlTabelas();ligarDrawer();
+    };
+  });
+}
+function lerTabelas(){
+  if(!$('#drawerBody').querySelector('input')) return;
+  $$('#drawerBody input[data-t]').forEach(function(inp){
+    var t=inp.getAttribute('data-t'), ix=+inp.getAttribute('data-i'), c=inp.getAttribute('data-c');
+    if(!CFG[t]||!CFG[t][ix]) return;
+    if(c==='ate'&&/acima/i.test(inp.value)) CFG[t][ix][c]=0;
+    else CFG[t][ix][c]=nb(inp.value);
+  });
+  if($('#cDep')){
+    CFG.dep=nb($('#cDep').value); CFG.simp=nb($('#cSimp').value); CFG.isencao=nb($('#cIsen').value);
+    CFG.fgts=nb($('#cFgts').value); CFG.multa=nb($('#cMulta').value);
+    CFG.horasMes=nb($('#cHoras').value)||220; CFG.prazoPgto=nb($('#cPrazo').value)||10;
+  }
+}
+
+/* ------------------------------- exemplos ------------------------------- */
+var EX1=[
+'Empresa: PAISAGISMO EXEMPLO LTDA',
+'CNPJ: 11.111.111/0001-11',
+'RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO',
+'Empregado: 292 - FULANO DE TAL CTPS: 1111111 / 0001 - SP',
+'Cargo: AUXILIAR DE ALMOXARIFADO PIS: Data nascto: 18/02/2000 Salário: 2.215,40',
+'Data admissão: 08/09/2025 Data opção: 08/09/2025 Data aviso: 28/07/2026 Data demissão: 28/07/2026 Data projeção: 27/08/2026',
+'Motivo demissão: Demitido SEM justa causa Data pagamento: 06/08/2026',
+'Salários',
+'9180 SALDO DE SALARIO DIAS 28,00 2.067,71',
+'Outros Proventos',
+'300 VALE REFEIÇÃO 375,00 259,20',
+'301 ACUMULO DE FUNÇÃO 40,00 642,06',
+'13º Salário',
+'8550 13 SALARIO INTEGRAL RESCISAO 7,00 1.292,32',
+'8551 MEDIA HORAS 13o RESCISAO 7,00 55,78',
+'8552 MEDIA VALOR 13o RESCISAO 7,00 10,72',
+'8553 VANTAGENS 13o RESCISAO 7,00 516,93',
+'13º Rescisão',
+'9592 13o 1/12 INDENIZADO 1,00 184,62',
+'9600 MEDIA VALOR 13o 1/12 INDENIZADO 1,00 1,53',
+'9601 MEDIA HORAS 13o 1/12 INDENIZADO 1,00 7,97',
+'9602 VANTAGENS 13o 1/12 INDENIZADO 1,00 73,85',
+'Férias Rescisão',
+'29 FERIAS PROPORCIONAIS 11,00 2.030,78',
+'811 FERIAS 1/12 INDENIZADO 1,00 184,62',
+'815 MEDIA HR FER PROPORCIONAL 11,00 53,18',
+'816 MEDIA VL FER PROPORCIONAL 11,00 10,15',
+'817 VANTAGEM FER PROPORCIONAL 11,00 812,31',
+'8126 1/3 FERIAS INDENIZADAS RESC 33,33 88,07',
+'8156 MEDIA VALOR FERIAS 1/12 INDENIZADO 1,00 0,92',
+'8157 MEDIA HORAS FERIAS 1/12 INDENIZADO 1,00 4,83',
+'8158 VANTAGENS FERIAS 1/12 INDENIZADO 1,00 73,85',
+'8169 1/3 FERIAS PROPORCIONAIS RESCISAO 33,33 968,81',
+'Aviso Prévio',
+'9591 AVISO PREVIO 30,00 2.215,40',
+'9596 MEDIA VALOR AVISO PREVIO 30,00 11,07',
+'9597 MEDIA HORAS AVISO PREVIO 30,00 58,01',
+'9598 VANTAGENS AVISO PREVIO 30,00 886,16',
+'Descontos',
+'8794 DIAS FALTAS DSR 1,00 73,85',
+'INSS',
+'826 INSS SOBRE RESCISAO 7,88 171,28',
+'989 INSS 13 SAL.RESCISAO 7,87 168,61',
+'Fechamento',
+'871 DESCONTO TROCO ADTO. SAL. 1,84 1,84',
+'993 TROCO MES ANTERIOR ,02 0,02',
+'Desconto Adiantamento',
+'981 DESC.ADIANT.SALARIAL 886,16 886,16',
+'Falta Integral',
+'8792 DIAS FALTAS 1,00 73,85',
+'Falta Parcial',
+'8069 HORAS FALTAS PARCIAL 38:36 388,70',
+'Desc. Vale Transporte',
+'48 VALE TRANSPORTE 6% 6,00 104,00',
+'Totais: 12.510,85 1.868,31',
+'Líquido rescisão: 10.642,54',
+'Saldo FGTS: 2.344,38 Saldo de Salário: 2.067,71',
+'Base FGTS Mensal: 2.173,37 Dias Estabilidade: 0',
+'FGTS Mensal: 173,86 Aviso Indenizado: SIM',
+'Base FGTS 13º: 1.875,75',
+'FGTS 13º: 150,06',
+'Base FGTS Aviso Prévio: 3.438,61',
+'FGTS Aviso Prévio: 275,08',
+'FGTS 20%: 0,00',
+'FGTS 40%: 1.177,35',
+'Contribuição Social 10%: 0,00',
+'Base INSS Mensal: 2.173,37',
+'Base INSS 13º Salário: 2.143,72',
+'Base IRRF Mensal: 1.287,21',
+'Abat. IRRF Mensal: 171,28',
+'Base IRRF 13º Salário: 2.143,72',
+'Abat. IRRF 13º Salário: 168,61',
+'08/09/2025 a 28/07/2026 27,50 2 33,33'
+].join('\n');
+
+var EX2=[
+'Empresa: MOVEIS EXEMPLO INDUSTRIA E COMERCIO LTDA',
+'CNPJ: 22.222.222/0001-22',
+'RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO',
+'Empregado: 17 - BELTRANO DE SOUZA CTPS: 2222222 / 0002 - SP',
+'Cargo: MARCENEIRO PLENO PIS: 111.11111.11-1 Data nascto: 03/08/2007 Salário: 2.500,00',
+'Data admissão: 02/12/2024 Data opção: 02/12/2024 Data aviso: 20/07/2026 Data demissão: 20/07/2026 Data projeção: 19/08/2026',
+'Motivo demissão: Pedido de demissão SEM justa causa Data pagamento: 29/07/2026',
+'Salários',
+'9180 SALDO DE SALARIO DIAS 20,00 1.612,90',
+'Outros Proventos',
+'250 REFLEXO EXTRAS DSR 4,00 49,46',
+'Horas Extras',
+'201 HORAS EXTRAS 60% 10:53 197,82',
+'13º Salário',
+'8550 13 SALARIO INTEGRAL RESCISAO 7,00 1.458,33',
+'8551 MEDIA HORAS 13o RESCISAO 7,00 283,23',
+'8552 MEDIA VALOR 13o RESCISAO 7,00 60,63',
+'Férias Rescisão',
+'28 FERIAS VENCIDAS 1,00 2.500,00',
+'29 FERIAS PROPORCIONAIS 8,00 1.666,67',
+'64 1/3 FERIAS RESCISAO 33,33 1.035,09',
+'815 MEDIA HR FER PROPORCIONAL 8,00 310,57',
+'816 MEDIA VL FER PROPORCIONAL 8,00 65,65',
+'818 MEDIA HR FERIAS VENCIDAS 1,00 516,16',
+'819 MEDIA VL FERIAS VENCIDAS 1,00 89,12',
+'8169 1/3 FERIAS PROPORCIONAIS RESCISAO 33,33 680,96',
+'Descontos',
+'49 AVISO PREVIO REAVIDO 30,00 2.500,00',
+'INSS',
+'826 INSS SOBRE RESCISAO 7,67 139,95',
+'989 INSS 13 SAL.RESCISAO 7,65 137,87',
+'Desconto Adiantamento',
+'981 DESC.ADIANT.SALARIAL 1.000,00 1.000,00',
+'Falta Parcial',
+'8069 HORAS FALTAS PARCIAL 3:04 34,89',
+'Totais: 10.526,59 3.812,71',
+'Líquido rescisão: 6.713,88',
+'Saldo FGTS: 2.778,43 Saldo de Salário: 1.612,90',
+'Base FGTS Mensal: 1.825,29 Dias Estabilidade: 0',
+'FGTS Mensal: 146,02 Aviso Indenizado: SIM',
+'Base FGTS 13º: 1.802,19',
+'FGTS 13º: 144,17',
+'Base FGTS Aviso Prévio: 0,00',
+'FGTS Aviso Prévio: 0,00',
+'FGTS 20%: 0,00',
+'FGTS 40%: 0,00',
+'Base INSS Mensal: 1.825,29',
+'Base INSS 13º Salário: 1.802,19',
+'Base IRRF Mensal: 825,29',
+'Abat. IRRF Mensal: 139,95',
+'Base IRRF 13º Salário: 1.802,19',
+'Abat. IRRF 13º Salário: 137,87',
+'02/12/2025 a 20/07/2026 20,00 33,33',
+'02/12/2024 a 01/12/2025 30,00 3 33,33'
+].join('\n');
+
+/* --------------------------------- boot --------------------------------- */
+function msg(cls,txt){$('#msg1').innerHTML='<div class="msg '+cls+'">'+txt+'</div>';}
+
+function processar(){
+  var d=parseAnalitico($('#txt').value);
+  if(d.erros.length&&!d.rubricas.length){ msg('err',d.erros.join('<br>')); return null; }
+  d.cctId=cctSugerida(d);
+  renderTudo(d);
+  window.scrollTo({top:0,behavior:'auto'});
+  return d;
+}
+function voltarEntrada(){
+  $('#telaResultado').hidden=true;
+  $('#telaEntrada').hidden=false;
+  $('#btNovo').hidden=true; $('#btPrint').hidden=true;
+  $('#txt').value=''; $('#msg1').innerHTML='';
+  $('#txt').focus();
+}
+
+/* Alguns motores não revalidam a propriedade `color` já computada quando as custom
+   properties mudam no :root — o fundo troca e o texto fica na cor do tema antigo.
+   Destacar e reanexar o body força o recálculo e preserva os listeners. */
+function forcarRecalculo(){
+  var b=document.body, pai=b.parentNode;
+  if(!pai) return;
+  var prox=b.nextSibling, y=window.pageYOffset||0;
+  pai.removeChild(b); pai.insertBefore(b,prox);
+  window.scrollTo(0,y);
+}
+function aplicarTema(t,inicial){
+  document.documentElement.setAttribute('data-tema',t);
+  $('#btTema').innerHTML=ico(t==='escuro'?'sol':'lua');
+  try{localStorage.setItem('mxresc_tema',t);}catch(e){}
+  if(!inicial) forcarRecalculo();
+}
+
+function ligarUI(){
+  $('#btPrint').innerHTML=ico('print');
+  $('#btFecharDrawer').innerHTML=ico('fechar');
+  $('.dz-mark').innerHTML=ico('colar');
+  $('#btNovo').insertBefore(el('span',null,ico('voltar')).firstChild,$('#btNovo').firstChild);
+  $('#btConvencoes').insertBefore(el('span',null,ico('convencao')).firstChild,$('#btConvencoes').firstChild);
+  $('#btTabelas').insertBefore(el('span',null,ico('ajustes')).firstChild,$('#btTabelas').firstChild);
+
+  var t;
+  try{t=localStorage.getItem('mxresc_tema');}catch(e){}
+  if(!t) t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro';
+  aplicarTema(t,true);
+
+  $('#btTema').onclick=function(){
+    aplicarTema(document.documentElement.getAttribute('data-tema')==='escuro'?'claro':'escuro');
+  };
+  $('#btPrint').onclick=function(){window.print();};
+  $('#btNovo').onclick=voltarEntrada;
+  $('#btTabelas').onclick=function(){abrirDrawer('tabelas');};
+  $('#btConvencoes').onclick=abrirConvencoes;
+  $('#btFecharDrawer').onclick=fecharDrawer;
+  $('#scrim').onclick=fecharDrawer;
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&!$('#drawer').hidden) fecharDrawer();
+  });
+
+  $('#bLer').onclick=processar;
+  $('#bEx1').onclick=function(){$('#txt').value=EX1;processar();};
+  $('#bEx2').onclick=function(){$('#txt').value=EX2;processar();};
+  $('#bLimpar').onclick=function(){$('#txt').value='';$('#msg1').innerHTML='';$('#txt').focus();};
+
+  $$('#filtros button').forEach(function(b){
+    b.onclick=function(){aplicaFiltro(b.getAttribute('data-f'));};
+  });
+
+  /* colar em qualquer lugar da tela de entrada */
+  document.addEventListener('paste',function(e){
+    if($('#telaEntrada').hidden) return;
+    if(e.target===$('#txt')) return;
+    var txt=(e.clipboardData||window.clipboardData).getData('text');
+    if(txt&&txt.length>80){ e.preventDefault(); $('#txt').value=txt; processar(); }
+  });
+
+  /* arrastar um .txt */
+  var dz=$('#drop');
+  ['dragenter','dragover'].forEach(function(ev){
+    dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add('over');});
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('over');});
+  });
+  dz.addEventListener('drop',function(e){
+    var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+    if(!f||!window.FileReader) return;
+    var fr=new FileReader();
+    fr.onload=function(){$('#txt').value=fr.result;processar();};
+    fr.readAsText(f);
+  });
+}
+
+/* ------------------------------- autoteste ------------------------------ */
+function autoteste(){
+  var t=0,f=0,logs=[];
+  function T(nome,cond,extra){
+    t++; if(cond) logs.push('  ok  '+nome);
+    else {f++; logs.push('FALHA  '+nome+(extra?'  ['+extra+']':''));}
+  }
+  function acha(F,re){for(var i=0;i<F.length;i++) if(re.test(F[i].titulo)) return F[i]; return null;}
+  function achaSev(F,re,sev){for(var i=0;i<F.length;i++) if(re.test(F[i].titulo)&&F[i].sev===sev) return F[i]; return null;}
+
+  /* --- utilitários --- */
+  T('nb 1.234,56',nb('1.234,56')===1234.56);
+  T('nb ,02',nb(',02')===0.02);
+  T('nh 38:36',Math.abs(nh('38:36')-38.6)<1e-9);
+  T('mo 1234.5','1.234,50'===mo(1234.5));
+  T('pd/fd ida e volta',fd(pd('08/09/2025'))==='08/09/2025');
+  T('addMeses clamp',fd(addMeses(pd('31/01/2026'),1))==='28/02/2026');
+  T('difDias',difDias(pd('01/01/2026'),pd('31/01/2026'))===30);
+
+  /* --- avos --- */
+  T('avos13 sem projeção = 7',avos13(pd('08/09/2025'),pd('28/07/2026'))===7,avos13(pd('08/09/2025'),pd('28/07/2026')));
+  T('avos13 com projeção = 8',avos13(pd('08/09/2025'),pd('27/08/2026'))===8,avos13(pd('08/09/2025'),pd('27/08/2026')));
+  T('avos13 caso 2 = 7',avos13(pd('02/12/2024'),pd('20/07/2026'))===7);
+  T('avos13 mês com 14 dias não conta',avos13(pd('01/01/2026'),pd('14/02/2026'))===1);
+  T('avos13 mês com 15 dias conta',avos13(pd('01/01/2026'),pd('15/02/2026'))===2);
+  T('avosFerias caso 1 = 11',avosFerias(pd('08/09/2025'),pd('28/07/2026'))===11,avosFerias(pd('08/09/2025'),pd('28/07/2026')));
+  T('avosFerias caso 1 c/ projeção = 12',avosFerias(pd('08/09/2025'),pd('27/08/2026'))===12);
+  T('avosFerias caso 2 = 8',avosFerias(pd('02/12/2025'),pd('20/07/2026'))===8,avosFerias(pd('02/12/2025'),pd('20/07/2026')));
+  T('avosFerias teto 12',avosFerias(pd('01/01/2024'),pd('31/12/2026'))===12);
+  T('aquisitivo atual caso 2',fd(inicioAquisitivoAtual(pd('02/12/2024'),pd('20/07/2026')))==='02/12/2025');
+
+  /* --- art. 130 --- */
+  T('art130 5 faltas = 30',diasFeriasPorFaltas(5)===30);
+  T('art130 6 faltas = 24',diasFeriasPorFaltas(6)===24);
+  T('art130 15 faltas = 18',diasFeriasPorFaltas(15)===18);
+  T('art130 24 faltas = 12',diasFeriasPorFaltas(24)===12);
+  T('art130 33 faltas = 0',diasFeriasPorFaltas(33)===0);
+
+  /* --- aviso proporcional --- */
+  T('aviso <1 ano = 30',diasAvisoDevidos(pd('08/09/2025'),pd('28/07/2026'),'sjc')===30);
+  T('aviso 1 ano = 33',diasAvisoDevidos(pd('02/12/2024'),pd('20/07/2026'),'sjc')===33);
+  T('aviso 5 anos = 45',diasAvisoDevidos(pd('01/01/2020'),pd('01/06/2025'),'sjc')===45);
+  T('aviso teto 90',diasAvisoDevidos(pd('01/01/1990'),pd('01/06/2025'),'sjc')===90);
+  T('aviso pedido demissão = 30',diasAvisoDevidos(pd('02/12/2024'),pd('20/07/2026'),'pedido')===30);
+
+  /* --- INSS (tabela deduzida dos cálculos reais) --- */
+  T('INSS 2.173,37 = 171,28',calcInss(2173.37)===171.28,calcInss(2173.37));
+  T('INSS 2.143,72 = 168,61',calcInss(2143.72)===168.61,calcInss(2143.72));
+  T('INSS 1.825,29 = 139,95',calcInss(1825.29)===139.95,calcInss(1825.29));
+  T('INSS 1.802,19 = 137,87',calcInss(1802.19)===137.87,calcInss(1802.19));
+  T('INSS base 0 = 0',calcInss(0)===0);
+  T('IRRF isento abaixo do piso',calcIrrf(1115.93)===0);
+
+  /* --- motivo --- */
+  T('motivo pedido antes de sem justa causa',motivoDoTexto('Pedido de demissão SEM justa causa')==='pedido');
+  T('motivo sem justa causa',motivoDoTexto('Demitido SEM justa causa')==='sjc');
+  T('motivo justa causa',motivoDoTexto('Demitido COM justa causa')==='justacausa');
+  T('motivo acordo',motivoDoTexto('Acordo entre as partes art. 484-A')==='acordo');
+
+  /* --- parser caso 1 --- */
+  var d1=parseAnalitico(EX1);
+  T('P1 rubricas lidas',d1.rubricas.length===34,d1.rubricas.length);
+  T('P1 salário',d1.salario===2215.40);
+  T('P1 admissão',fd(d1.admissao)==='08/09/2025');
+  T('P1 projeção',fd(d1.projecao)==='27/08/2026');
+  T('P1 pagamento',fd(d1.pagamento)==='06/08/2026');
+  T('P1 motivo sjc',d1.motivo==='sjc');
+  T('P1 aviso indenizado',d1.tipoAviso==='indenizado');
+  T('P1 totais',d1.totalP===12510.85&&d1.totalD===1868.31);
+  T('P1 líquido',d1.liquido===10642.54);
+  T('P1 base INSS mensal',d1.bases['Base INSS Mensal']===2173.37);
+  T('P1 base FGTS aviso',d1.bases['Base FGTS Aviso Prévio']===3438.61);
+  T('P1 FGTS 40%',d1.bases['FGTS 40%']===1177.35);
+  T('P1 período de férias',d1.ferias.length===1&&d1.ferias[0].faltas===2,JSON.stringify(d1.ferias));
+  T('P1 ref com dois pontos',(function(){for(var i=0;i<d1.rubricas.length;i++)if(d1.rubricas[i].cod==='8069')return Math.abs(d1.rubricas[i].refN-38.6)<1e-9;return false;})());
+  T('P1 ref com vírgula solta',(function(){for(var i=0;i<d1.rubricas.length;i++)if(d1.rubricas[i].cod==='993')return d1.rubricas[i].valor===0.02;return false;})());
+  var sp1=0,sd1=0;for(var i=0;i<d1.rubricas.length;i++){if(d1.rubricas[i].tipo==='P')sp1+=d1.rubricas[i].valor;else sd1+=d1.rubricas[i].valor;}
+  T('P1 soma proventos bate com o total',ok2(sp1,12510.85,0.05),r2(sp1));
+  T('P1 soma descontos bate com o total',ok2(sd1,1868.31,0.05),r2(sd1));
+
+  var c1=classificar(d1);
+  T('C1 saldo isolado',c1.saldo.length===1);
+  T('C1 13º prop tem 4 rubricas',c1.d13.length===4,c1.d13.length);
+  T('C1 13º do aviso tem 4 rubricas',c1.d13Aviso.length===4,c1.d13Aviso.length);
+  T('C1 férias do aviso tem 4 rubricas',c1.feriasAviso.length===4,c1.feriasAviso.length);
+  T('C1 1/3 tem 2 rubricas',c1.terco.length===2,c1.terco.length);
+  T('C1 PAT fora dos mensais',(function(){for(var i=0;i<c1.mensais.length;i++)if(/REFEI/.test(c1.mensais[i].nome))return false;return true;})());
+  T('C1 base INSS reconstruída = 2.173,37',ok2(soma(c1.mensais)-soma(c1.faltas),2173.37,0.02),r2(soma(c1.mensais)-soma(c1.faltas)));
+  T('C1 INSS mensal separado do 13º',c1.inssMensal.length===1&&c1.inss13.length===1);
+
+  var r1=auditar(d1), F1=r1.findings;
+  T('A1 avos de 13º ok',achaSev(F1,/Avos de 13/,'ok')!=null);
+  T('A1 avos de férias ok',achaSev(F1,/Avos de f[eé]rias/,'ok')!=null);
+  T('A1 saldo de salário ok',achaSev(F1,/^Saldo de sal[aá]rio$/,'ok')!=null);
+  T('A1 terço constitucional ok',achaSev(F1,/Ter[cç]o constitucional/,'ok')!=null);
+  T('A1 multa 40% ok',achaSev(F1,/Multa de 40/,'ok')!=null,(acha(F1,/Multa de 40/)||{}).dif);
+  T('A1 base FGTS do aviso ok',achaSev(F1,/Base do FGTS sobre o aviso/,'ok')!=null);
+  T('A1 base INSS mensal ok',achaSev(F1,/Base do INSS mensal/,'ok')!=null);
+  T('A1 base INSS 13º ok',achaSev(F1,/Base do INSS do 13/,'ok')!=null);
+  T('A1 INSS mensal ok',achaSev(F1,/INSS sobre a rescis/,'ok')!=null);
+  T('A1 INSS 13º ok',achaSev(F1,/INSS do 13/,'ok')!=null);
+  T('A1 projeção do aviso ok',achaSev(F1,/proje[cç][aã]o do aviso/i,'ok')!=null);
+  T('A1 dias de aviso ok',achaSev(F1,/Dias de aviso/,'ok')!=null);
+  T('A1 prazo de pagamento ok',achaSev(F1,/Prazo de pagamento/,'ok')!=null);
+  T('A1 totais ok',achaSev(F1,/Total de proventos/,'ok')!=null&&achaSev(F1,/Total de descontos/,'ok')!=null);
+  T('A1 líquido ok',achaSev(F1,/L[ií]quido da rescis/,'ok')!=null);
+  T('A1 VT dentro do limite',achaSev(F1,/Vale-transporte/,'ok')!=null);
+  T('A1 médias no 13º',achaSev(F1,/M[eé]dias integradas ao 13/,'ok')!=null);
+  T('A1 médias no aviso',achaSev(F1,/M[eé]dias integradas ao Aviso/,'ok')!=null);
+  T('A1 sem erro de multa indevida',acha(F1,/Multa do FGTS indevida/)==null);
+  T('A1 sem erro de avo faltando',acha(F1,/Avo do aviso indenizado n[aã]o lan/)==null);
+  var e1=0;for(i=0;i<F1.length;i++)if(F1[i].sev==='erro')e1++;
+  T('A1 nenhum erro no caso correto',e1===0,'erros: '+(function(){var s=[];for(var i=0;i<F1.length;i++)if(F1[i].sev==='erro')s.push(F1[i].titulo+' ('+F1[i].dec+' vs '+F1[i].esp+')');return s.join(' | ');})());
+
+  /* --- vínculo achado -> rubrica (destaque cruzado) --- */
+  var fSaldo=acha(F1,/^Saldo de sal[aá]rio$/);
+  T('R1 saldo aponta a rubrica 9180',fSaldo&&fSaldo.rubs&&fSaldo.rubs.join()==='9180',fSaldo&&JSON.stringify(fSaldo.rubs));
+  var fTerco=acha(F1,/Ter[cç]o constitucional/);
+  T('R1 terço aponta as 2 rubricas de 1/3',fTerco&&fTerco.rubs&&fTerco.rubs.length===2,fTerco&&JSON.stringify(fTerco.rubs));
+  var fAvos=acha(F1,/Avos de 13/);
+  T('R1 avos de 13º aponta só as bases',fAvos&&fAvos.rubs&&fAvos.rubs.join()==='8550,9592',fAvos&&JSON.stringify(fAvos.rubs));
+  T('R1 códigos apontados existem nas rubricas',(function(){
+    var set={};for(var i=0;i<d1.rubricas.length;i++)set[d1.rubricas[i].cod]=1;
+    for(i=0;i<F1.length;i++){ var rs=F1[i].rubs; if(!rs)continue;
+      for(var j=0;j<rs.length;j++) if(!set[rs[j]]) return false; }
+    return true;})());
+  T('R1 vários achados com vínculo',(function(){var n=0;for(var i=0;i<F1.length;i++)if(F1[i].rubs&&F1[i].rubs.length)n++;return n>=10;})(),
+    (function(){var n=0;for(var i=0;i<F1.length;i++)if(F1[i].rubs&&F1[i].rubs.length)n++;return n;})());
+
+  /* --- parser caso 2 --- */
+  var d2=parseAnalitico(EX2);
+  T('P2 rubricas lidas',d2.rubricas.length===19,d2.rubricas.length);
+  T('P2 motivo pedido de demissão',d2.motivo==='pedido');
+  T('P2 aviso reavido',d2.tipoAviso==='reavido',d2.tipoAviso);
+  T('P2 salário',d2.salario===2500);
+  T('P2 dois períodos de férias',d2.ferias.length===2,d2.ferias.length);
+  T('P2 período sem coluna de faltas',d2.ferias[0].faltas===0&&d2.ferias[0].dias===20);
+  T('P2 período com faltas',d2.ferias[1].faltas===3);
+  T('P2 totais',d2.totalP===10526.59&&d2.totalD===3812.71);
+  var sp2=0,sd2=0;for(i=0;i<d2.rubricas.length;i++){if(d2.rubricas[i].tipo==='P')sp2+=d2.rubricas[i].valor;else sd2+=d2.rubricas[i].valor;}
+  T('P2 soma proventos bate',ok2(sp2,10526.59,0.05),r2(sp2));
+  T('P2 soma descontos bate',ok2(sd2,3812.71,0.05),r2(sd2));
+
+  var r2r=auditar(d2), F2=r2r.findings;
+  T('A2 saldo /31 detectado',achaSev(F2,/dividido pelos dias do m[eê]s/,'erro')!=null);
+  T('A2 diferença do saldo = 53,77',(function(){var f=acha(F2,/dividido pelos dias/);return f&&ok2(f.dif,53.77,0.02);})(),(acha(F2,/dividido pelos dias/)||{}).dif);
+  T('A2 avos de 13º ok',achaSev(F2,/Avos de 13/,'ok')!=null);
+  T('A2 avos de férias ok',achaSev(F2,/Avos de f[eé]rias/,'ok')!=null);
+  T('A2 terço constitucional ok',achaSev(F2,/Ter[cç]o constitucional/,'ok')!=null,(acha(F2,/Ter[cç]o/)||{}).dif);
+  T('A2 sem multa de FGTS cobrada',acha(F2,/Multa de 40/)==null&&acha(F2,/Multa do FGTS indevida/)==null);
+  T('A2 aviso reavido conferido',acha(F2,/Aviso n[aã]o cumprido descontado/)!=null);
+  T('A2 aviso reavido = 30 dias, sem erro',achaSev(F2,/Aviso n[aã]o cumprido descontado/,'ok')!=null);
+  T('A2 sem erro de aviso descontado indevidamente',acha(F2,/Aviso descontado em dispensa/)==null);
+  T('A2 base INSS mensal ok',achaSev(F2,/Base do INSS mensal/,'ok')!=null);
+  T('A2 INSS mensal ok',achaSev(F2,/INSS sobre a rescis/,'ok')!=null);
+  T('A2 INSS 13º ok',achaSev(F2,/INSS do 13/,'ok')!=null);
+  T('A2 FGTS mensal ok',achaSev(F2,/FGTS mensal/,'ok')!=null);
+  T('A2 prazo de pagamento ok',achaSev(F2,/Prazo de pagamento/,'ok')!=null);
+  T('A2 férias vencidas dentro do concessivo',acha(F2,/fora do per[ií]odo concessivo/)==null);
+  T('A2 nenhum FGTS de aviso',acha(F2,/FGTS de aviso sem aviso indenizado/)==null);
+  T('A2 sem falso positivo de compensação',acha(F2,/Compensa[cç][aã]o acima/)==null);
+  T('A2 alerta de descontos totais',achaSev(F2,/Descontos totais acima/,'alerta')!=null);
+  var e2=[];for(i=0;i<F2.length;i++)if(F2[i].sev==='erro')e2.push(F2[i].titulo);
+  T('A2 único erro é o saldo /31',e2.length===1,e2.join(' | '));
+
+  /* --- contagem e veredito --- */
+  var cg1=contagem(F1), cg2=contagem(F2);
+  T('V1 caso correto sem erro',cg1.erro===0,cg1.erro);
+  T('V1 único alerta é a falta de convenção',cg1.alerta===1&&acha(F1,/Nenhuma conven[çc][ãa]o coletiva aplicada/)!=null,
+    (function(){var s=[];for(var i=0;i<F1.length;i++)if(F1[i].sev==='alerta')s.push(F1[i].titulo);return s.join(' | ');})());
+  T('V1 impacto zero no caso correto',ok2(cg1.impacto,0),cg1.impacto);
+  T('V2 impacto = 53,77',ok2(cg2.impacto,53.77,0.02),cg2.impacto);
+  T('V2 tem conferidos ok',cg2.ok>10,cg2.ok);
+
+  /* unidades: dias, avos e % não podem entrar na soma em reais */
+  T('U unidade dos dias de aviso',(function(){var f=acha(F1,/Dias de aviso/);return f&&f.un==='dias';})());
+  T('U unidade dos avos de 13º',(function(){var f=acha(F1,/Avos de 13/);return f&&f.un==='avos';})());
+  T('U unidade dos avos de férias',(function(){var f=acha(F1,/Avos de f[eé]rias/);return f&&f.un==='avos';})());
+  T('U unidade padrão é reais',(function(){var f=acha(F1,/^Saldo de sal[aá]rio$/);return f&&f.un==='brl';})());
+  T('U formata dias',valorUn(30,'dias')==='30 dias'&&valorUn(1,'dias')==='1 dia');
+  T('U formata avos',valorUn(7,'avos')==='7/12');
+  T('U formata percentual',valorUn(60,'perc')==='60%');
+  T('U formata reais',valorUn(1234.5,'brl')==='1.234,50');
+  var dDias=clone(d1);
+  for(i=0;i<dDias.rubricas.length;i++) if(dDias.rubricas[i].cod==='9591') dDias.rubricas[i].refN=20;
+  var Fd=auditar(dDias).findings, cgD=contagem(Fd), somaBrl=0, somaOutras=0;
+  for(i=0;i<Fd.length;i++){
+    if(Fd[i].sev!=='erro'||!Fd[i].dif) continue;
+    if((Fd[i].un||'brl')==='brl') somaBrl+=Fd[i].dif; else somaOutras+=Fd[i].dif;
+  }
+  T('U impacto soma só os erros em reais',ok2(cgD.impacto,somaBrl,0.02),cgD.impacto+' vs '+r2(somaBrl));
+  T('U há erro em dias neste cenário',somaOutras===10,somaOutras);
+  T('U os 10 dias ficaram fora do impacto',!ok2(cgD.impacto,somaBrl+somaOutras,0.02));
+  T('U contador de erros sem valor',cgD.semValor===1,cgD.semValor);
+
+  /* --- cenários sintéticos de erro --- */
+  function clone(d){var c=JSON.parse(JSON.stringify(d));
+    ['admissao','dataAviso','demissao','projecao','pagamento','nascimento','aposentadoria'].forEach(function(k){c[k]=d[k]?new Date(d[k].getTime()):null;});
+    for(var i=0;i<c.ferias.length;i++){c.ferias[i].ini=d.ferias[i].ini?new Date(d.ferias[i].ini.getTime()):null;c.ferias[i].fim=d.ferias[i].fim?new Date(d.ferias[i].fim.getTime()):null;}
+    return c;}
+
+  var x=clone(d1); x.pagamento=pd('20/08/2026');
+  T('E1 pagamento fora do prazo',achaSev(auditar(x).findings,/Pagamento fora do prazo/,'erro')!=null);
+
+  x=clone(d1); x.projecao=pd('27/09/2026');
+  T('E2 projeção errada detectada',achaSev(auditar(x).findings,/proje[cç][aã]o do aviso incorreta/i,'erro')!=null);
+
+  x=clone(d1); x.motivo='justacausa';
+  var Fx=auditar(x).findings;
+  T('E3 justa causa: 13º indevido',achaSev(Fx,/13[º°o] proporcional pago indevidamente/,'erro')!=null);
+  T('E3 justa causa: férias prop. indevidas',achaSev(Fx,/F[eé]rias proporcionais pagas indevidamente/,'erro')!=null);
+  T('E3 justa causa: multa indevida',achaSev(Fx,/Multa do FGTS indevida/,'erro')!=null);
+
+  x=clone(d1);
+  x.rubricas=x.rubricas.filter(function(r){return !/1\/12 INDENIZADO/.test(r.nome);});
+  T('E4 avo do aviso faltando detectado',achaSev(auditar(x).findings,/Avo do aviso indenizado n[aã]o lan/,'erro')!=null);
+
+  x=clone(d1);
+  for(i=0;i<x.rubricas.length;i++) if(/^1\/3 FERIAS PROPORCIONAIS/.test(x.rubricas[i].nome)) x.rubricas[i].valor=0;
+  T('E5 terço faltando detectado',achaSev(auditar(x).findings,/Ter[cç]o constitucional/,'erro')!=null);
+
+  x=clone(d1); x.bases['FGTS 40%']=800;
+  T('E6 multa de 40% a menor detectada',achaSev(auditar(x).findings,/Multa de 40/,'erro')!=null);
+
+  x=clone(d1); x.bases['Base INSS Mensal']=2173.37+3170.64;
+  T('E7 aviso indenizado na base do INSS',achaSev(auditar(x).findings,/Base do INSS mensal/,'erro')!=null);
+
+  x=clone(d1);
+  x.rubricas=x.rubricas.filter(function(r){return !/M[EÉ]DIA|VANTAG/.test(r.nome.toUpperCase());});
+  var Fm=auditar(x).findings;
+  T('E8 médias ausentes no 13º',achaSev(Fm,/Sem m[eé]dias em 13/,'erro')!=null);
+  T('E8 médias ausentes no aviso',achaSev(Fm,/Sem m[eé]dias em Aviso/,'erro')!=null);
+
+  x=clone(d2); x.motivo='sjc';
+  T('E9 aviso descontado em dispensa detectado',achaSev(auditar(x).findings,/Aviso descontado em dispensa/,'erro')!=null);
+
+  x=clone(d2); x.ferias[1].faltas=20;
+  T('E10 faltas reduzindo férias (art.130)',achaSev(auditar(x).findings,/Faltas injustificadas reduzem/,'alerta')!=null);
+
+  x=clone(d2); x.ferias[1].ini=pd('02/12/2022'); x.ferias[1].dias=30;
+  T('E11 férias em dobro detectada',achaSev(auditar(x).findings,/fora do per[ií]odo concessivo/,'erro')!=null);
+
+  x=clone(d1);
+  for(i=0;i<x.rubricas.length;i++) if(/VALE TRANSPORTE/.test(x.rubricas[i].nome)) x.rubricas[i].valor=400;
+  T('E12 VT acima de 6%',achaSev(auditar(x).findings,/Vale-transporte acima/,'erro')!=null);
+
+  x=clone(d1); x.totalP=99999;
+  T('E13 total de proventos divergente',achaSev(auditar(x).findings,/Total de proventos/,'erro')!=null);
+
+  x=clone(d1); x.demissao=pd('01/09/2025');
+  T('E14 admissão depois da demissão',achaSev(auditar(x).findings,/Admiss[aã]o posterior/,'erro')!=null);
+
+  x=clone(d1); x.nascimento=pd('18/02/2010');
+  T('E15 menor de 18 anos',achaSev(auditar(x).findings,/menor de 18/,'alerta')!=null);
+
+  x=clone(d1); x.rubricas.push({cod:'999',nome:'EMPRESTIMO CONSIGNADO',ref:'1,00',refN:1,valor:5000,tipo:'D',grupo:'Descontos'});
+  T('E16 compensação acima de 1 remuneração',achaSev(auditar(x).findings,/Compensa[cç][aã]o acima/,'erro')!=null);
+
+  x=clone(d1);
+  for(i=0;i<x.rubricas.length;i++) if(x.rubricas[i].cod==='9591') x.rubricas[i].refN=45;
+  T('E17 dias de aviso divergentes',achaSev(auditar(x).findings,/Dias de aviso/,'erro')!=null);
+
+  x=clone(d1); x.admissao=pd('08/09/2020');
+  T('E18 aviso proporcional (5 anos) cobrado',achaSev(auditar(x).findings,/Dias de aviso/,'erro')!=null);
+
+  /* --- convenções coletivas --- */
+  var CCT_BACKUP=CCTS.slice();
+  function comCct(def,dados){
+    var c=normalizarCct(def||{}); c.id='cctTeste';
+    for(var k in (dados||{})) if(k!=='__d') c[k]=dados[k];
+    CCTS=[c];
+    var x=(dados&&dados.__d)?dados.__d:clone(d1); x.cctId='cctTeste';
+    return {c:c,x:x,F:auditar(x).findings};
+  }
+  function base(extra){
+    var o={id:'cctTeste',nome:'CCT Teste 2026',sindicato:'Sind. Teste',
+           vigIni:'01/01/2026',vigFim:'31/12/2026',dataBase:'01/01'};
+    for(var k in (extra||{})) o[k]=extra[k];
+    return o;
+  }
+
+  T('CCT vigência cobre a data',cctVigente(normalizarCct(base()),pd('28/07/2026')));
+  T('CCT vigência não cobre',!cctVigente(normalizarCct(base()),pd('28/07/2027')));
+  T('CCT sem vigência aceita qualquer data',cctVigente(normalizarCct({}),pd('01/01/2030')));
+  T('CCT piso geral',pisoDaFuncao(normalizarCct(base({pisos:[{funcao:'',valor:2000}]})),'QUALQUER')===2000);
+  T('CCT piso por função vence o geral',
+    pisoDaFuncao(normalizarCct(base({pisos:[{funcao:'',valor:2000},{funcao:'ALMOXARIF',valor:2600}]})),'AUXILIAR DE ALMOXARIFADO')===2600);
+  T('CCT piso por função não casa → geral',
+    pisoDaFuncao(normalizarCct(base({pisos:[{funcao:'',valor:2000},{funcao:'SOLDADOR',valor:3000}]})),'AUXILIAR DE ALMOXARIFADO')===2000);
+  T('CCT normalizar preenche campos ausentes',
+    (function(){var c=normalizarCct({nome:'x'});return c.aviso&&c.pagamento&&c.livres&&c.pisos.length===1;})());
+  T('CCT normalizar preserva o que veio',normalizarCct({nome:'x',aviso:{diasMin:45}}).aviso.diasMin===45);
+
+  T('CCT idade em data',idadeEm(pd('18/02/2000'),pd('28/07/2026'))===26,idadeEm(pd('18/02/2000'),pd('28/07/2026')));
+  T('CCT idade antes do aniversário',idadeEm(pd('18/02/2000'),pd('17/02/2026'))===25);
+
+  T('CCT aviso: piso de dias amplia',
+    diasAvisoDevidos(pd('08/09/2025'),pd('28/07/2026'),'sjc',normalizarCct(base({aviso:{diasMin:45}})),null)===45);
+  T('CCT aviso: piso menor não reduz a lei',
+    diasAvisoDevidos(pd('01/01/2010'),pd('01/06/2025'),'sjc',normalizarCct(base({aviso:{diasMin:35}})),null)===75);
+  T('CCT aviso: adicional por idade',
+    diasAvisoDevidos(pd('08/09/2025'),pd('28/07/2026'),'sjc',normalizarCct(base({aviso:{idadeMin:45,idadeDias:10}})),pd('01/01/1970'))===40);
+  T('CCT aviso: idade abaixo do mínimo não soma',
+    diasAvisoDevidos(pd('08/09/2025'),pd('28/07/2026'),'sjc',normalizarCct(base({aviso:{idadeMin:45,idadeDias:10}})),pd('18/02/2000'))===30);
+  T('CCT aviso: adicional por tempo de casa',
+    diasAvisoDevidos(pd('01/01/2016'),pd('01/06/2026'),'sjc',normalizarCct(base({aviso:{anosMin:10,anosDias:15}})),null)===60,
+    diasAvisoDevidos(pd('01/01/2016'),pd('01/06/2026'),'sjc',normalizarCct(base({aviso:{anosMin:10,anosDias:15}})),null));
+  T('CCT aviso: não amplia no pedido de demissão',
+    diasAvisoDevidos(pd('08/09/2025'),pd('28/07/2026'),'pedido',normalizarCct(base({aviso:{diasMin:45}})),null)===30);
+  T('CCT prazo de pagamento encurtado',prazoPagamento(normalizarCct(base({pagamento:{prazoDias:5}})))===5);
+  T('CCT prazo maior não vale',prazoPagamento(normalizarCct(base({pagamento:{prazoDias:20}})))===CFG.prazoPgto);
+
+  T('CCT data-base: término na janela dos 30 dias',
+    fd(dataBaseProxima('01/01',pd('27/12/2026')))==='01/01/2027',fd(dataBaseProxima('01/01',pd('27/12/2026'))));
+  T('CCT data-base: término fora da janela',dataBaseProxima('01/01',pd('01/07/2026'))===null);
+  T('CCT data-base: exatamente 30 dias antes',fd(dataBaseProxima('01/05',pd('01/04/2026')))==='01/05/2026');
+  T('CCT data-base: no próprio dia não é janela',dataBaseProxima('01/05',pd('01/05/2026'))===null);
+  T('CCT data-base: formato inválido',dataBaseProxima('maio',pd('01/04/2026'))===null);
+
+  var r;
+  r=comCct(base({pisos:[{funcao:'',valor:2600}]}));
+  T('CCT achado: salário abaixo do piso',achaSev(r.F,/abaixo do piso/,'erro')!=null);
+  T('CCT achado: diferença do piso',(function(){var f=acha(r.F,/abaixo do piso/);return f&&ok2(f.dif,384.60,0.02);})(),
+    (acha(r.F,/abaixo do piso/)||{}).dif);
+  r=comCct(base({pisos:[{funcao:'',valor:2000}]}));
+  T('CCT achado: piso respeitado',achaSev(r.F,/Piso salarial/,'ok')!=null);
+
+  r=comCct(base({vigIni:'01/01/2020',vigFim:'31/12/2020'}));
+  T('CCT achado: fora de vigência',achaSev(r.F,/fora de vig[êe]ncia/,'erro')!=null);
+
+  r=comCct(base({aviso:{diasMin:45}}));
+  T('CCT achado: aviso ampliado cobrado',achaSev(r.F,/Dias de aviso/,'erro')!=null);
+  T('CCT achado: aviso esperado = 45',(function(){var f=acha(r.F,/Dias de aviso/);return f&&f.esp===45;})());
+
+  r=comCct(base({dataBase:'20/09'}));   // término projetado 27/08/2026 cai nos 30 dias antes de 20/09
+  T('CCT achado: indenização adicional da data-base',achaSev(r.F,/Indeniza[çc][ãa]o adicional da data-base/,'erro')!=null);
+  T('CCT achado: indenização = 1 salário',(function(){var f=acha(r.F,/Indeniza[çc][ãa]o adicional/);return f&&ok2(f.esp,2215.40);})(),
+    (acha(r.F,/Indeniza[çc][ãa]o adicional/)||{}).esp);
+  r=comCct(base({dataBase:'20/09',dataBaseIndeniz:false}));
+  T('CCT achado: indenização desligada não cobra',acha(r.F,/Indeniza[çc][ãa]o adicional/)==null);
+  r=comCct(base({dataBase:'01/03'}));
+  T('CCT achado: fora da janela da data-base não cobra',acha(r.F,/Indeniza[çc][ãa]o adicional/)==null);
+
+  var d2pg=clone(d2); d2pg.pagamento=pd('20/08/2026');
+  r=comCct(base({pagamento:{prazoDias:0,multaTipo:'dias',multaValor:1,multaCumulativa:true}}),{__d:d2pg});
+  T('CCT achado: multa da convenção por atraso',achaSev(r.F,/Multa da conven[çc][ãa]o/,'erro')!=null);
+  r=comCct(base({pagamento:{prazoDias:5}}),{__d:clone(d1)});
+  T('CCT achado: prazo encurtado reprova pagamento no 9º dia',achaSev(r.F,/Pagamento fora do prazo/,'erro')!=null);
+
+  r=comCct(base({aviso:{vedaDesconto:true}}),{__d:clone(d2)});
+  T('CCT achado: desconto do aviso vedado',achaSev(r.F,/Desconto do aviso vedado/,'erro')!=null);
+
+  var dAss=clone(d1);
+  dAss.rubricas.push({cod:'700',nome:'CONTRIB ASSISTENCIAL',ref:'1,00',refN:1,valor:44.31,tipo:'D',grupo:'Descontos'});
+  r=comCct(base({assistencial:{prevista:false}}),{__d:dAss});
+  T('CCT achado: assistencial sem previsão',achaSev(r.F,/sem previs[ãa]o na conven/,'erro')!=null);
+  r=comCct(base({assistencial:{prevista:true,perc:1}}),{__d:dAss});
+  T('CCT achado: assistencial acima do teto',achaSev(r.F,/acima do previsto/,'erro')!=null,
+    (acha(r.F,/acima do previsto/)||{}).esp);
+  r=comCct(base({assistencial:{prevista:true,perc:3}}),{__d:dAss});
+  T('CCT achado: assistencial dentro do teto vira alerta de oposição',achaSev(r.F,/Contribui[çc][ãa]o assistencial descontada/,'alerta')!=null);
+
+  r=comCct(base({adicionais:{he:60}}),{__d:clone(d2)});
+  T('CCT achado: hora extra abaixo do adicional',acha(r.F,/Hora extra abaixo/)==null,'d2 tem HE 60%, não deve acusar');
+  r=comCct(base({adicionais:{he:70}}),{__d:clone(d2)});
+  T('CCT achado: hora extra 60% < 70% da convenção',achaSev(r.F,/Hora extra abaixo/,'erro')!=null);
+
+  r=comCct(base({homologacao:{obrigatoria:true,mesesMin:12}}),{__d:clone(d2)});
+  T('CCT achado: homologação exigida',achaSev(r.F,/sujeita a homologa/,'alerta')!=null);
+  r=comCct(base({homologacao:{obrigatoria:true,mesesMin:12}}),{__d:clone(d1)});
+  T('CCT achado: contrato curto não exige homologação',acha(r.F,/sujeita a homologa/)==null);
+
+  var dApo=clone(d1); dApo.aposentadoria=pd('01/03/2027');
+  r=comCct(base({estabilidade:{preAposMeses:12,preAposAnosCasa:0}}),{__d:dApo});
+  T('CCT achado: estabilidade pré-aposentadoria',achaSev(r.F,/pr[ée]-aposentadoria/,'erro')!=null);
+  r=comCct(base({estabilidade:{preAposMeses:12,preAposAnosCasa:5}}),{__d:dApo});
+  T('CCT achado: anos de casa insuficientes não acusa',acha(r.F,/pr[ée]-aposentadoria/)==null);
+
+  r=comCct(base({livres:[{titulo:'Cláusula 20 — abono',texto:'Abono de R$ 300 na rescisão.',tipo:'conferir'},
+                         {titulo:'Cláusula 31',texto:'Só informativo.',tipo:'informativo'}]}));
+  T('CCT achado: cláusula livre vira ponto de atenção',achaSev(r.F,/Cl[áa]usula 20/,'alerta')!=null);
+  T('CCT achado: cláusula informativa vira info',achaSev(r.F,/Cl[áa]usula 31/,'info')!=null);
+
+  CCTS=[];
+  var semCct=auditar(clone(d1)).findings;
+  T('CCT achado: sem convenção avisa',achaSev(semCct,/Nenhuma conven[çc][ãa]o coletiva aplicada/,'alerta')!=null);
+  T('CCT sem convenção não muda os achados da CLT',
+    (function(){var e=0;for(var i=0;i<semCct.length;i++)if(semCct[i].sev==='erro')e++;return e===0;})());
+  CCTS=CCT_BACKUP;
+
+  /* --- os exemplos embutidos precisam ser fictícios: o repositório é público.
+         A conferência é por lista de permitidos — assim o próprio teste não
+         carrega o dado que ele existe para manter fora daqui. --- */
+  var FICT={
+    nomes:['FULANO DE TAL','BELTRANO DE SOUZA'],
+    empresas:['PAISAGISMO EXEMPLO LTDA','MOVEIS EXEMPLO INDUSTRIA E COMERCIO LTDA'],
+    cnpjs:['11.111.111/0001-11','22.222.222/0001-22'],
+    ctps:['1111111','2222222'],
+    pis:['111.11111.11-1']
+  };
+  function soPermitidos(re,ok,g){
+    var achados=(EX1+EX2).match(re)||[];
+    if(!achados.length) return false;
+    for(var i=0;i<achados.length;i++){
+      var v=achados[i].replace(g,'').trim();
+      if(ok.indexOf(v)<0) return false;
+    }
+    return true;
+  }
+  T('X exemplo 1 fictício',d1.nome===FICT.nomes[0]&&d1.cnpj===FICT.cnpjs[0]&&d1.empresa===FICT.empresas[0],
+    d1.nome+' / '+d1.cnpj+' / '+d1.empresa);
+  T('X exemplo 2 fictício',d2.nome===FICT.nomes[1]&&d2.cnpj===FICT.cnpjs[1]&&d2.empresa===FICT.empresas[1],
+    d2.nome+' / '+d2.cnpj+' / '+d2.empresa);
+  T('X só CNPJ fictício nos fixtures',soPermitidos(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g,FICT.cnpjs,/^$/),
+    ((EX1+EX2).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g)||[]).join(' '));
+  T('X só CTPS fictício nos fixtures',soPermitidos(/CTPS:\s*\d+/g,FICT.ctps,/CTPS:\s*/),
+    ((EX1+EX2).match(/CTPS:\s*\d+/g)||[]).join(' '));
+  T('X só PIS fictício nos fixtures',soPermitidos(/PIS:\s*[\d.-]+/g,FICT.pis,/PIS:\s*/),
+    ((EX1+EX2).match(/PIS:\s*[\d.-]+/g)||[]).join(' '));
+  T('X nome do empregado é da lista fictícia',
+    FICT.nomes.indexOf(d1.nome)>=0&&FICT.nomes.indexOf(d2.nome)>=0);
+
+  /* --- parser robusto --- */
+  T('parser texto vazio',parseAnalitico('').erros.length>0);
+  T('parser lixo',parseAnalitico('nada aqui\noutra linha').erros.length>0);
+
+  /* --- apoio da UI --- */
+  T('U tempo de casa caso 1',tempoCasa(d1)==='10 meses',tempoCasa(d1));
+  T('U tempo de casa caso 2',tempoCasa(d2)==='1 ano e 7 meses',tempoCasa(d2));
+  T('U ícone de cada severidade',!!SVG.erro&&!!SVG.alerta&&!!SVG.ok&&!!SVG.info);
+  T('U plural',plural(1,'erro','erros')==='1 erro'&&plural(2,'erro','erros')==='2 erros');
+  T('U vão em dias',vao(pd('01/01/2026'),pd('20/01/2026'))==='19 dias',vao(pd('01/01/2026'),pd('20/01/2026')));
+  T('U vão em meses',vao(pd('01/01/2026'),pd('01/05/2026'))==='4 meses',vao(pd('01/01/2026'),pd('01/05/2026')));
+  T('U vão em anos e meses',vao(pd('02/12/2024'),pd('20/07/2026'))==='1 ano e 7 meses',vao(pd('02/12/2024'),pd('20/07/2026')));
+  T('U vão no limite de 45 dias',vao(pd('01/01/2026'),pd('20/02/2026'))==='1 mês',vao(pd('01/01/2026'),pd('20/02/2026')));
+
+  var resumo=(f?'FALHOU':'PASSOU')+': '+(t-f)+'/'+t+' verificações';
+  return {total:t,falhas:f,resumo:resumo,logs:logs};
+}
+
+/* -------------------------------- boot ---------------------------------- */
+function boot(){
+  ligarUI();
+  if(/[?&]teste=1/.test(location.search)){
+    var r=autoteste();
+    var box=el('div');
+    box.style.cssText='position:fixed;right:14px;bottom:14px;max-height:70vh;overflow:auto;'+
+      'width:min(560px,92vw);z-index:200;background:var(--sf);border:1px solid var(--line);'+
+      'border-radius:14px;padding:16px;box-shadow:var(--sh)';
+    box.innerHTML='<b style="display:block;margin-bottom:10px;font-size:14px;color:'+(r.falhas?'var(--erro-tx)':'var(--ok-tx)')+'">'+
+      'AUTOTESTE — '+esc(r.resumo)+'</b>'+
+      '<pre style="font:11.5px/1.5 var(--mono);white-space:pre-wrap;margin:0;color:var(--tx2)">'+
+      esc(r.logs.join('\n'))+'</pre>';
+    document.body.appendChild(box);
+    if(window.console) console.log(r.resumo+'\n'+r.logs.join('\n'));
+    window.__MXRESC_TESTE__=r;
+  }
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
+
+/* exporta para o runner em Node */
+if(typeof module!=='undefined'&&module.exports){
+  module.exports={autoteste:autoteste,parseAnalitico:parseAnalitico,auditar:auditar,EX1:EX1,EX2:EX2};
+}
+window.MXRESC={autoteste:autoteste,parseAnalitico:parseAnalitico,auditar:auditar,EX1:EX1,EX2:EX2,
+  calcInss:calcInss,avos13:avos13,avosFerias:avosFerias};
+})();
+</script>
+</body>
+</html>
