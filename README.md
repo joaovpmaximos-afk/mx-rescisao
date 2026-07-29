@@ -209,13 +209,21 @@ Por isso as conferências de INSS/IRRF continuam saindo como **atenção**, nunc
 tudo é editável no painel, com marcador de versão que atualiza quem já tinha uma tabela antiga
 salva no navegador. Confira a legislação vigente antes de tratar uma divergência como erro.
 
+### Backup entre máquinas
+
+Como tudo fica salvo no navegador, cada computador começa do zero. O painel **Tabelas & regras**
+tem **Exportar tudo / Importar** — leva num só texto as tabelas, os parâmetros e as convenções
+cadastradas para outra máquina ou para a equipe. É a alternativa self-contained enquanto não há
+um backend compartilhado.
+
 ## Autoteste
 
 - No navegador: `index.html?teste=1` — caixa de resultado no canto inferior direito.
 - No terminal: `node testar.js`
 
-424 verificações: utilitários, avos, art. 130, aviso proporcional, tabelas 2026 de INSS/IRRF
-(faixas oficiais, truncamento por faixa, isenção, versionamento), extrator de PDF
+430 verificações: utilitários, avos, art. 130, aviso proporcional, tabelas 2026 de INSS/IRRF
+(faixas oficiais, truncamento por faixa, isenção, versionamento), backup de configuração,
+extrator de PDF
 (dicionários aninhados, CMap, larguras de glifo, matriz de texto, montagem de linhas, escolha
 do arquivo certo), parser dos dois
 relatórios reais, leitura do TRCT e a conferência cruzada (identificação, totais, caixa a caixa

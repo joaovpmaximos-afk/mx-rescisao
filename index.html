@@ -3425,6 +3425,15 @@ function htmlTabelas(){
      '<div class="full"><button class="btn" id="bResetCfg">Restaurar padrão</button></div>'+
      '</div></div>';
 
+  /* backup: leva tabelas + convenções para outra máquina sem depender de servidor */
+  h+='<div class="card"><h3>Backup da configuração</h3><div class="card-body">'+
+     '<p style="margin:0 0 10px;color:var(--tx2);font-size:12.5px">Como tudo fica salvo neste navegador, '+
+     'cada máquina começa do zero. Exporte aqui para levar as tabelas, os parâmetros e as convenções '+
+     'cadastradas para outro computador ou para a equipe.</p>'+
+     '<div class="row"><button class="btn" id="bExpCfg">Exportar tudo</button>'+
+     '<button class="btn" id="bImpCfg">Importar</button></div>'+
+     '<div id="areaCfg"></div></div></div>';
+
   /* matriz */
   var ms=['sjc','pedido','acordo','justacausa','termino'];
   h+='<div class="card"><h3>O que é devido em cada motivo</h3>'+
@@ -3806,6 +3815,64 @@ function ligarDrawer(){
       $('#drawerBody').innerHTML=htmlTabelas();ligarDrawer();
     };
   });
+  $('#bExpCfg').onclick=function(){
+    lerTabelas();
+    var pac=backupConfig();
+    $('#areaCfg').innerHTML='<div class="card" style="margin-top:12px"><div class="card-body">'+
+      '<p class="muted" style="margin:0 0 8px">Copie e guarde. Inclui tabelas, parâmetros e '+
+      plural((pac.ccts||[]).length,'convenção','convenções')+'.</p>'+
+      '<textarea id="txCfgExp" style="min-height:130px" readonly></textarea></div></div>';
+    $('#txCfgExp').value=JSON.stringify(pac,null,1);
+    $('#txCfgExp').focus(); $('#txCfgExp').select();
+  };
+  $('#bImpCfg').onclick=function(){
+    $('#areaCfg').innerHTML='<div class="card" style="margin-top:12px"><div class="card-body">'+
+      '<p class="muted" style="margin:0 0 8px">Cole o texto exportado. Substitui as tabelas e os parâmetros; '+
+      'as convenções com mesmo nome e vigência são atualizadas, as demais acrescentadas.</p>'+
+      '<textarea id="txCfgImp" style="min-height:130px"></textarea>'+
+      '<div class="row" style="margin-top:10px"><button class="btn primary" id="bFazImpCfg">Importar</button></div>'+
+      '<div id="msgCfgImp"></div></div></div>';
+    $('#bFazImpCfg').onclick=function(){
+      var r=restaurarConfig($('#txCfgImp').value);
+      if(!r.ok){ $('#msgCfgImp').innerHTML='<div class="msg err">'+esc(r.erro)+'</div>'; return; }
+      $('#drawerBody').innerHTML=htmlTabelas(); ligarDrawer();
+      $('#areaCfg').innerHTML='<div class="msg ok" style="margin-top:12px">'+esc(r.resumo)+'</div>';
+    };
+    $('#txCfgImp').focus();
+  };
+}
+/* junta tudo o que fica salvo no navegador num pacote transferível */
+function backupConfig(){
+  var cctEmp={}; try{ cctEmp=JSON.parse(localStorage.getItem('mxresc_cct_empresa')||'{}'); }catch(e){}
+  return { mxrescisao:'config', tabelaVersao:CFG.tabelaVersao, cfg:CFG, ccts:CCTS, cctEmpresa:cctEmp };
+}
+function restaurarConfig(txt){
+  var o; try{ o=JSON.parse(txt); }catch(e){ return {ok:false,erro:'Não consegui ler esse texto como um backup de configuração.'}; }
+  if(!o||(!o.cfg&&!o.ccts)) return {ok:false,erro:'O texto não parece um backup do MX Rescisão.'};
+  var partes=[];
+  if(o.cfg&&o.cfg.inss&&o.cfg.irrf){
+    CFG=o.cfg;
+    for(var k in CFG_PADRAO) if(!(k in CFG)) CFG[k]=CFG_PADRAO[k];
+    salvarCfg(); partes.push('tabelas e parâmetros');
+  }
+  if(o.ccts&&o.ccts.length){
+    var novas=0,subs=0;
+    for(var i=0;i<o.ccts.length;i++){
+      var c=normalizarCct(o.ccts[i]), achou=-1;
+      for(var j=0;j<CCTS.length;j++) if(CCTS[j].nome===c.nome&&CCTS[j].vigIni===c.vigIni) achou=j;
+      if(achou>=0){ c.id=CCTS[achou].id; CCTS[achou]=c; subs++; } else { c.id=novoId(); CCTS.push(c); novas++; }
+    }
+    salvarCcts();
+    partes.push((novas?novas+' convenção(ões) nova(s)':'')+(novas&&subs?' e ':'')+(subs?subs+' atualizada(s)':''));
+  }
+  if(o.cctEmpresa){
+    try{
+      var atual=JSON.parse(localStorage.getItem('mxresc_cct_empresa')||'{}');
+      for(var cnpj in o.cctEmpresa) atual[cnpj]=o.cctEmpresa[cnpj];
+      localStorage.setItem('mxresc_cct_empresa',JSON.stringify(atual));
+    }catch(e){}
+  }
+  return {ok:true, resumo:'Importado: '+(partes.join('; ')||'nada reconhecido')+'.'};
 }
 function lerTabelas(){
   if(!$('#drawerBody').querySelector('input')) return;
@@ -4839,6 +4906,30 @@ function autoteste(){
   T('ME memória não é confundida com analítico nem com termo',
     pontuarRelatorio(EXMED)<0&&pontuarTrct(EXMED)<0);
 
+  /* --- backup da configuração --- */
+  var pac=backupConfig();
+  T('BK backup embala cfg e convenções',pac.cfg!=null&&Array.isArray(pac.ccts)&&pac.mxrescisao==='config');
+  T('BK backup carrega a versão da tabela',pac.tabelaVersao==='2026.1');
+  T('BK importa tabela editada de outra máquina',(function(){
+    var alt=JSON.parse(JSON.stringify(backupConfig()));
+    alt.cfg=JSON.parse(JSON.stringify(alt.cfg)); alt.cfg.multa=99; alt.cfg.horasMes=200;
+    var r=restaurarConfig(JSON.stringify(alt));
+    var ok=r.ok&&CFG.multa===99&&CFG.horasMes===200;
+    CFG=JSON.parse(JSON.stringify(CFG_PADRAO)); salvarCfg();   /* restaura */
+    return ok;})());
+  T('BK importa preenchendo campos que faltam',(function(){
+    var r=restaurarConfig(JSON.stringify({cfg:{inss:[{ate:1621,aliq:7.5}],irrf:[{ate:0,aliq:0,ded:0}]}}));
+    var ok=r.ok&&CFG.fgts===8&&CFG.horasMes===220;   /* completou do padrão */
+    CFG=JSON.parse(JSON.stringify(CFG_PADRAO)); salvarCfg();
+    return ok;})());
+  T('BK importa convenção nova',(function(){
+    var antes=CCTS.length;
+    var r=restaurarConfig(JSON.stringify({ccts:[{nome:'CCT Importada Teste',vigIni:'01/01/2026',pisos:[{funcao:'',valor:1800}]}]}));
+    var ok=r.ok&&CCTS.length===antes+1;
+    CCTS=CCTS.filter(function(c){return c.nome!=='CCT Importada Teste';});   /* limpa */
+    return ok;})());
+  T('BK recusa texto que não é backup',restaurarConfig('lixo qualquer').ok===false&&restaurarConfig('{"a":1}').ok===false);
+
   /* --- extrato do FGTS --- */
   var FG=parseFgts(EXFGTS);
   T('FG reconhece o extrato',FG!=null);
@@ -5202,10 +5293,12 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 /* exporta para o runner em Node */
 if(typeof module!=='undefined'&&module.exports){
   module.exports={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,
-    parseMedias:parseMedias,parseFgts:parseFgts,avaliarExpr:avaliarExpr,auditar:auditar,EX1:EX1,EX2:EX2};
+    parseMedias:parseMedias,parseFgts:parseFgts,avaliarExpr:avaliarExpr,auditar:auditar,
+    backupConfig:backupConfig,restaurarConfig:restaurarConfig,EX1:EX1,EX2:EX2};
 }
 window.MXRESC={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,
   parseMedias:parseMedias,parseFgts:parseFgts,avaliarExpr:avaliarExpr,auditar:auditar,
+  backupConfig:backupConfig,restaurarConfig:restaurarConfig,
   EX1:EX1,EX2:EX2,calcInss:calcInss,avos13:avos13,avosFerias:avosFerias};
 })();
 </script>
