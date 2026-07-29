@@ -5,9 +5,10 @@ Conferidor automático de rescisão trabalhista. HTML único, offline, sem depen
 ## Como usar
 
 1. Abra `index.html` no navegador.
-2. Abra o **Relatório Analítico do Cálculo de Rescisão** em PDF, `Ctrl+A` / `Ctrl+C`.
-3. Cole na tela inicial — `Ctrl+V` funciona em qualquer ponto da página, e também dá para
-   arrastar um `.txt` para dentro dela.
+2. Arraste o PDF do **Relatório Analítico do Cálculo de Rescisão** para a tela — ou clique em
+   **Abrir PDF…**. Pode soltar a pasta inteira do funcionário: o app pontua cada arquivo,
+   escolhe o relatório analítico e diz qual usou, ignorando as memórias de médias e o TRCT.
+3. Se preferir, ainda dá para colar o texto: `Ctrl+V` funciona em qualquer ponto da página.
 
 A tela de resultado tem três partes:
 
@@ -135,7 +136,9 @@ essas duas conferências saem como **atenção**, não como erro.
 - No navegador: `index.html?teste=1` — caixa de resultado no canto inferior direito.
 - No terminal: `node testar.js`
 
-278 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, parser dos dois
+306 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
+(dicionários aninhados, CMap, matriz de texto, montagem de linhas, escolha do arquivo certo),
+parser dos dois
 relatórios reais, auditoria completa dos dois casos, o vínculo achado→rubrica que alimenta o
 destaque cruzado, o veredito, as unidades dos achados, o módulo de convenções (vigência,
 piso, aviso ampliado, data-base, multa, assistencial, homologação, estabilidade, cláusulas
@@ -145,6 +148,35 @@ procedimento em três estados) e 18 cenários sintéticos de erro (pagamento atr
 errada, justa causa com verbas indevidas, avo do aviso esquecido, terço faltando, multa a
 menor, aviso indenizado na base do INSS, médias ausentes, férias em dobro, VT acima de 6%,
 compensação excessiva).
+
+## Leitura do PDF
+
+O extrator é próprio, sem biblioteca externa, para o app continuar sendo um arquivo só que
+funciona offline. Cobre o que os sistemas de folha geram: PDF clássico, sem criptografia,
+streams `FlateDecode` e fontes `Type0`/`CIDFontType2`.
+
+Dois detalhes que quebram um extrator ingênuo, e que este trata:
+
+- **Os bytes do texto não são letras.** Com `Identity-H`, cada par de bytes é um índice de
+  glifo. Sem ler o `ToUnicode` do PDF e traduzir, o texto sai como sequência de símbolos.
+- **Dicionários aninham.** O `/Resources` da página vem inline e contém um `/ColorSpace`
+  antes do `/Font`; uma regex não-gulosa termina no `>>` errado e nunca acha as fontes.
+
+A descompactação usa `DecompressionStream`, nativo do navegador. Em navegador antigo o app
+avisa e oferece o caminho de colar o texto.
+
+**O que não lê:** PDF protegido por senha e PDF digitalizado (imagem, sem camada de texto).
+Nos dois casos a mensagem diz o motivo e oferece a alternativa — não falha em silêncio.
+
+Para conferir o extrator contra PDFs reais sem publicá-los:
+
+```bash
+node validar-pdf.js ./pdfs
+```
+
+Coloque os arquivos numa pasta local (`pdfs/` e `*.pdf` estão no `.gitignore` — PDF de
+rescisão tem dado pessoal de empregado e de cliente e não entra no repositório). O script
+mostra o texto extraído, o que o parser entendeu e o que a auditoria apontou.
 
 ## Notas de implementação
 

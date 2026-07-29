@@ -4,8 +4,10 @@
 var fs = require('fs'), path = require('path');
 
 var html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-var m = /<script>([\s\S]*?)<\/script>/.exec(html);
-if (!m) { console.error('script não encontrado no index.html'); process.exit(2); }
+/* o index.html tem dois blocos: o extrator de PDF e o app */
+var blocos = [], re = /<script>([\s\S]*?)<\/script>/g, x;
+while ((x = re.exec(html))) blocos.push(x[1]);
+if (!blocos.length) { console.error('script não encontrado no index.html'); process.exit(2); }
 
 /* DOM mínimo: só o suficiente para o boot não quebrar */
 function fakeEl() {
@@ -44,7 +46,7 @@ global.localStorage = {
   getItem: function (k) { return this._d[k] || null; },
   setItem: function (k, v) { this._d[k] = v; }
 };
-eval(m[1]);
+blocos.forEach(function (b) { eval(b); });
 
 /* dentro do eval, `module` é o deste arquivo (wrapper CommonJS) */
 var api = module.exports && module.exports.autoteste ? module.exports : global.window.MXRESC;

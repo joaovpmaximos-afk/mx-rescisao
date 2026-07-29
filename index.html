@@ -415,15 +415,25 @@ input:focus,select:focus{outline:none;border-color:var(--brand)}
 <main class="entrada" id="telaEntrada">
   <div class="dropzone" id="drop">
     <div class="dz-mark" aria-hidden="true"></div>
-    <h1>Cole o relatório da rescisão.<br>Eu recalculo tudo do zero.</h1>
-    <p class="sub">Abra o <b>Relatório Analítico do Cálculo de Rescisão</b> em PDF, selecione tudo e cole aqui
-      — <span class="kbd">Ctrl</span> <span class="kbd">V</span> funciona em qualquer ponto da página.
-      Também aceita arquivo <code>.txt</code> arrastado. Nada sai deste computador.</p>
-    <textarea id="txt" aria-label="Texto do relatório analítico"
-      placeholder="RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO&#10;Empregado: ...&#10;Data admissão: ...  Data demissão: ...&#10;9180  SALDO DE SALARIO DIAS   28,00   2.067,71&#10;..."></textarea>
-    <div class="dz-actions">
-      <button class="btn primary" id="bLer">Conferir rescisão</button>
-      <button class="btn ghost" id="bLimpar">Limpar</button>
+    <h1>Solte o PDF da rescisão.<br>Eu recalculo tudo do zero.</h1>
+    <p class="sub">Arraste aqui o <b>Relatório Analítico do Cálculo de Rescisão</b> em PDF — pode soltar a pasta
+      inteira do funcionário que eu escolho o arquivo certo. Também dá para colar o texto:
+      <span class="kbd">Ctrl</span> <span class="kbd">V</span> funciona em qualquer ponto da página.
+      Nada sai deste computador.</p>
+    <div class="dz-actions" style="margin:0 0 16px">
+      <button class="btn primary" id="bAbrir">Abrir PDF…</button>
+      <input type="file" id="fArquivo" accept=".pdf,application/pdf,.txt,text/plain" multiple
+             style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
+             tabindex="-1" aria-hidden="true">
+      <button class="btn ghost" id="bColar">ou colar o texto</button>
+    </div>
+    <div id="areaTexto" hidden>
+      <textarea id="txt" aria-label="Texto do relatório analítico"
+        placeholder="RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO&#10;Empregado: ...&#10;Data admissão: ...  Data demissão: ...&#10;9180  SALDO DE SALARIO DIAS   28,00   2.067,71&#10;..."></textarea>
+      <div class="dz-actions">
+        <button class="btn primary" id="bLer">Conferir rescisão</button>
+        <button class="btn ghost" id="bLimpar">Limpar</button>
+      </div>
     </div>
     <div id="msg1"></div>
   </div>
@@ -474,6 +484,350 @@ input:focus,select:focus{outline:none;border-color:var(--brand)}
   </div>
   <div class="drawer-b" id="drawerBody"></div>
 </aside>
+
+<script>
+/* =========================================================================
+   Extrator de texto de PDF — sem dependência externa.
+   Usa DecompressionStream, que existe no navegador e no Node. Cobre o que os
+   sistemas de folha geram: PDF clássico, sem criptografia, FlateDecode e
+   fontes Type0/CIDFontType2 com ToUnicode (os bytes são índices de glifo, e
+   sem o CMap o texto sai como lixo).
+   ========================================================================= */
+(function (raiz) {
+"use strict";
+
+function inflar(bytes) {
+  if (typeof DecompressionStream === 'undefined')
+    return Promise.reject(new Error('sem-decompression-stream'));
+  function tenta(formato) {
+    var ds = new DecompressionStream(formato);
+    var w = ds.writable.getWriter();
+    /* as promessas do writer rejeitam em paralelo com a leitura — soltas,
+       viram "unhandled rejection" */
+    var nada = function () {};
+    w.write(bytes)['catch'](nada);
+    w.close()['catch'](nada);
+    return new Response(ds.readable).arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
+  }
+  return tenta('deflate')['catch'](function () { return tenta('deflate-raw'); });
+}
+
+function paraLatin1(bytes) {
+  var s = '', n = bytes.length, i = 0, pedaco = 8192;
+  for (; i < n; i += pedaco)
+    s += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + pedaco, n)));
+  return s;
+}
+
+function indexarObjetos(s) {
+  var objs = {}, re = /(\d+)\s+(\d+)\s+obj\b/g, m;
+  while ((m = re.exec(s))) {
+    var ini = m.index + m[0].length;
+    var fim = s.indexOf('endobj', ini);
+    if (fim < 0) fim = s.length;
+    var corpo = s.slice(ini, fim);
+    var o = { num: +m[1], corpo: corpo, ini: ini };
+    var ms = /\bstream\r?\n?/.exec(corpo);
+    if (ms) {
+      var sIni = ini + ms.index + ms[0].length;
+      var sFim = s.indexOf('endstream', sIni);
+      o.stream = [sIni, sFim < 0 ? fim : sFim];
+      o.dict = corpo.slice(0, ms.index);
+    } else o.dict = corpo;
+    objs[o.num] = o;
+  }
+  return objs;
+}
+
+/* dicionários aninham: regex não-gulosa para no ">>" do sub-dicionário */
+function dictBalanceado(s, de) {
+  var i = de, prof = 0, n = s.length;
+  while (i < n - 1) {
+    if (s.charAt(i) === '<' && s.charAt(i + 1) === '<') { prof++; i += 2; continue; }
+    if (s.charAt(i) === '>' && s.charAt(i + 1) === '>') { prof--; i += 2; if (!prof) return s.slice(de, i); continue; }
+    i++;
+  }
+  return s.slice(de);
+}
+function subDict(dict, chave) {
+  if (!dict) return null;
+  var m = new RegExp('\\/' + chave + '\\s*<<').exec(dict);
+  if (!m) return null;
+  return dictBalanceado(dict, dict.indexOf('<<', m.index));
+}
+function ref(dict, chave) {
+  var m = new RegExp('\\/' + chave + '\\s+(\\d+)\\s+\\d+\\s+R').exec(dict || '');
+  return m ? +m[1] : null;
+}
+function refs(dict, chave) {
+  var m = new RegExp('\\/' + chave + '\\s*\\[([^\\]]*)\\]').exec(dict || '');
+  if (!m) { var u = ref(dict, chave); return u == null ? [] : [u]; }
+  var o = [], re = /(\d+)\s+\d+\s+R/g, x;
+  while ((x = re.exec(m[1]))) o.push(+x[1]);
+  return o;
+}
+
+function conteudoDe(o, bytesTodos, objs) {
+  if (!o || !o.stream) return Promise.resolve('');
+  var ini = o.stream[0], fim = o.stream[1];
+  /* o intervalo até "endstream" inclui o EOL final e o inflate é estrito
+     com bytes sobrando: corta pelo /Length quando ele existir */
+  var mLen = /\/Length\s+(\d+)(?!\s+\d+\s+R)/.exec(o.dict), tam = null;
+  if (mLen) tam = +mLen[1];
+  else {
+    var rl = ref(o.dict, 'Length');
+    if (rl != null && objs && objs[rl]) {
+      var mv = /^\s*(\d+)/.exec(objs[rl].corpo);
+      if (mv) tam = +mv[1];
+    }
+  }
+  if (tam != null && tam > 0 && ini + tam <= fim) fim = ini + tam;
+  else while (fim > ini && (bytesTodos[fim - 1] === 10 || bytesTodos[fim - 1] === 13)) fim--;
+  var cru = bytesTodos.subarray(ini, fim);
+  if (!/\/Filter/.test(o.dict)) return Promise.resolve(paraLatin1(cru));
+  if (!/FlateDecode/.test(o.dict)) return Promise.resolve('');
+  return inflar(cru).then(paraLatin1)['catch'](function () { return ''; });
+}
+
+function hexParaTexto(h) {
+  if (h.length <= 2) return String.fromCharCode(parseInt(h, 16));
+  var s = '';
+  for (var i = 0; i + 4 <= h.length; i += 4) s += String.fromCharCode(parseInt(h.substr(i, 4), 16));
+  return s;
+}
+function lerCMap(txt) {
+  var mapa = {}, m, re;
+  re = /beginbfchar([\s\S]*?)endbfchar/g;
+  while ((m = re.exec(txt))) {
+    var par = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g, p;
+    while ((p = par.exec(m[1]))) mapa[parseInt(p[1], 16)] = hexParaTexto(p[2]);
+  }
+  re = /beginbfrange([\s\S]*?)endbfrange/g;
+  while ((m = re.exec(txt))) {
+    var corpo = m[1];
+    var r1 = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g, a;
+    while ((a = r1.exec(corpo))) {
+      var ini = parseInt(a[1], 16), fim = parseInt(a[2], 16), dst = parseInt(a[3], 16);
+      if (fim - ini > 65535) continue;
+      for (var c = ini; c <= fim; c++) mapa[c] = String.fromCharCode(dst + (c - ini));
+    }
+    var r2 = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([\s\S]*?)\]/g, b;
+    while ((b = r2.exec(corpo))) {
+      var i0 = parseInt(b[1], 16), lista = b[3].match(/<([0-9A-Fa-f]+)>/g) || [];
+      for (var k = 0; k < lista.length; k++)
+        mapa[i0 + k] = hexParaTexto(lista[k].replace(/[<>]/g, ''));
+    }
+  }
+  return mapa;
+}
+
+function lerLiteral(s, i) {
+  var prof = 1, out = [], n = s.length;
+  i++;
+  while (i < n && prof > 0) {
+    var c = s.charAt(i);
+    if (c === '\\') {
+      var d = s.charAt(i + 1);
+      if (d >= '0' && d <= '7') {
+        var oct = d, j = i + 2;
+        while (oct.length < 3 && s.charAt(j) >= '0' && s.charAt(j) <= '7') { oct += s.charAt(j); j++; }
+        out.push(String.fromCharCode(parseInt(oct, 8))); i = j; continue;
+      }
+      var esc = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' };
+      out.push(esc[d] != null ? esc[d] : d); i += 2; continue;
+    }
+    if (c === '(') prof++;
+    else if (c === ')') { prof--; if (!prof) { i++; break; } }
+    out.push(c); i++;
+  }
+  return [out.join(''), i];
+}
+function decodificar(bruto, cmap, doisBytes) {
+  var out = '', i;
+  if (doisBytes) {
+    for (i = 0; i + 1 < bruto.length; i += 2) {
+      var cod = (bruto.charCodeAt(i) << 8) | bruto.charCodeAt(i + 1);
+      out += (cmap && cmap[cod] != null) ? cmap[cod] : '';
+    }
+  } else {
+    for (i = 0; i < bruto.length; i++) {
+      var c = bruto.charCodeAt(i);
+      out += (cmap && cmap[c] != null) ? cmap[c] : String.fromCharCode(c);
+    }
+  }
+  return out;
+}
+
+function extrairRuns(conteudo, fontes) {
+  var runs = [], n = conteudo.length, i = 0;
+  var tm = [1, 0, 0, 1, 0, 0], tlm = tm.slice(), tl = 0, fonte = null;
+  var pilha = [];
+  function trans(m, e, f) {
+    return [m[0], m[1], m[2], m[3], m[0] * e + m[2] * f + m[4], m[1] * e + m[3] * f + m[5]];
+  }
+  function mostrar(txt) { if (txt) runs.push({ x: tm[4], y: tm[5], t: txt }); }
+  function num(desde) { var v = pilha[pilha.length - desde]; return v && v.n != null ? v.n : 0; }
+
+  while (i < n) {
+    var c = conteudo.charAt(i);
+    if (c === '(') { var r = lerLiteral(conteudo, i); pilha.push({ s: r[0] }); i = r[1]; continue; }
+    if (c === '<' && conteudo.charAt(i + 1) !== '<') {
+      var fimH = conteudo.indexOf('>', i);
+      if (fimH < 0) break;
+      var hex = conteudo.slice(i + 1, fimH).replace(/[^0-9A-Fa-f]/g, '');
+      if (hex.length % 2) hex += '0';
+      var bs = '';
+      for (var k = 0; k < hex.length; k += 2) bs += String.fromCharCode(parseInt(hex.substr(k, 2), 16));
+      pilha.push({ s: bs }); i = fimH + 1; continue;
+    }
+    if (c === '[') { pilha.push({ arr: 1 }); i++; continue; }
+    if (c === ']') {
+      var itens = [], j = pilha.length - 1;
+      while (j >= 0 && pilha[j].arr == null) { itens.unshift(pilha[j]); j--; }
+      pilha.length = j < 0 ? 0 : j;
+      pilha.push({ tj: itens }); i++; continue;
+    }
+    if (c === '-' || c === '.' || (c >= '0' && c <= '9')) {
+      var mn = /^[-+]?\d*\.?\d+/.exec(conteudo.slice(i, i + 24));
+      if (mn) { pilha.push({ n: parseFloat(mn[0]) }); i += mn[0].length; continue; }
+    }
+    if (c === '/') {
+      var mf = /^\/([^\s/<>\[\]()]+)/.exec(conteudo.slice(i, i + 80));
+      if (mf) { pilha.push({ nome: mf[1] }); i += mf[0].length; continue; }
+    }
+    var mop = /^[A-Za-z'"*]+/.exec(conteudo.slice(i, i + 12));
+    if (!mop) { i++; continue; }
+    var op = mop[0]; i += op.length;
+
+    if (op === 'BT') { tm = [1, 0, 0, 1, 0, 0]; tlm = tm.slice(); }
+    else if (op === 'Tm') { tlm = [num(6), num(5), num(4), num(3), num(2), num(1)]; tm = tlm.slice(); }
+    else if (op === 'Td') { tlm = trans(tlm, num(2), num(1)); tm = tlm.slice(); }
+    else if (op === 'TD') { tl = -num(1); tlm = trans(tlm, num(2), num(1)); tm = tlm.slice(); }
+    else if (op === 'TL') { tl = num(1); }
+    else if (op === 'T*') { tlm = trans(tlm, 0, -tl); tm = tlm.slice(); }
+    else if (op === 'Tf') {
+      var nm = null;
+      for (var q = pilha.length - 1; q >= 0; q--) if (pilha[q].nome) { nm = pilha[q].nome; break; }
+      fonte = fontes[nm] || null;
+    }
+    else if (op === 'Tj' || op === "'" || op === '"') {
+      var st = pilha[pilha.length - 1];
+      if (op !== 'Tj') { tlm = trans(tlm, 0, -tl); tm = tlm.slice(); }
+      if (st && st.s != null) mostrar(decodificar(st.s, fonte && fonte.cmap, fonte ? fonte.doisBytes : false));
+    }
+    else if (op === 'TJ') {
+      var a = pilha[pilha.length - 1];
+      if (a && a.tj) {
+        var buf = '';
+        for (var z = 0; z < a.tj.length; z++) {
+          var it = a.tj[z];
+          if (it.s != null) buf += decodificar(it.s, fonte && fonte.cmap, fonte ? fonte.doisBytes : false);
+          else if (it.n != null && it.n < -120) buf += ' ';
+        }
+        mostrar(buf);
+      }
+    }
+    pilha.length = 0;
+  }
+  return runs;
+}
+
+function montarLinhas(runs) {
+  if (!runs.length) return '';
+  var tol = 2.2;
+  runs.sort(function (a, b) { return (b.y - a.y) || (a.x - b.x); });
+  var linhas = [], atual = null, i;
+  for (i = 0; i < runs.length; i++) {
+    var r = runs[i];
+    if (!atual || Math.abs(atual.y - r.y) > tol) { atual = { y: r.y, itens: [] }; linhas.push(atual); }
+    atual.itens.push(r);
+  }
+  var out = [];
+  for (i = 0; i < linhas.length; i++) {
+    var it = linhas[i].itens.sort(function (a, b) { return a.x - b.x; });
+    var s = '';
+    for (var j = 0; j < it.length; j++) {
+      var t = it[j].t;
+      if (!t) continue;
+      if (s !== '' && !/\s$/.test(s) && !/^\s/.test(t)) s += ' ';
+      s += t;
+    }
+    s = s.replace(/\s+/g, ' ').trim();
+    if (s) out.push(s);
+  }
+  return out.join('\n');
+}
+
+function lerPdf(arrayBuffer) {
+  var bytes = new Uint8Array(arrayBuffer);
+  var s = paraLatin1(bytes);
+  if (s.slice(0, 5) !== '%PDF-') return Promise.reject(new Error('nao-e-pdf'));
+  if (/\/Encrypt\b/.test(s)) return Promise.reject(new Error('pdf-protegido'));
+
+  var objs = indexarObjetos(s), paginas = [], k;
+  for (k in objs) if (/\/Type\s*\/Page\b/.test(objs[k].dict)) paginas.push(objs[k]);
+  if (!paginas.length) return Promise.reject(new Error('sem-paginas'));
+  paginas.sort(function (a, b) { return a.num - b.num; });
+
+  var recursosRaiz = null;
+  for (k in objs) if (/\/Type\s*\/Pages\b/.test(objs[k].dict)) {
+    var rr = ref(objs[k].dict, 'Resources');
+    recursosRaiz = (rr != null && objs[rr]) ? objs[rr].dict : subDict(objs[k].dict, 'Resources');
+  }
+
+  var cmapsPendentes = [], fontesPorNome = {};
+  function registrarFontes(dictRecursos) {
+    if (!dictRecursos) return;
+    var corpoFontes = subDict(dictRecursos, 'Font');
+    if (!corpoFontes) {
+      var r = ref(dictRecursos, 'Font');
+      if (r != null && objs[r]) corpoFontes = objs[r].dict;
+    }
+    if (!corpoFontes) return;
+    var re = /\/([^\s/<>]+)\s+(\d+)\s+\d+\s+R/g, m;
+    while ((m = re.exec(corpoFontes))) {
+      var nome = m[1], fo = objs[+m[2]];
+      if (!fo || fontesPorNome[nome]) continue;
+      var reg = { doisBytes: /\/Type0\b/.test(fo.dict) || /Identity/.test(fo.dict), cmap: null };
+      fontesPorNome[nome] = reg;
+      var tu = ref(fo.dict, 'ToUnicode');
+      if (tu != null && objs[tu]) cmapsPendentes.push({ reg: reg, obj: objs[tu] });
+    }
+  }
+  for (var p = 0; p < paginas.length; p++) {
+    var rp = ref(paginas[p].dict, 'Resources');
+    registrarFontes((rp != null && objs[rp]) ? objs[rp].dict : subDict(paginas[p].dict, 'Resources'));
+  }
+  registrarFontes(recursosRaiz);
+
+  return Promise.all(cmapsPendentes.map(function (c) {
+    return conteudoDe(c.obj, bytes, objs).then(function (txt) { if (txt) c.reg.cmap = lerCMap(txt); });
+  })).then(function () {
+    var tarefas = [];
+    for (var i = 0; i < paginas.length; i++) {
+      var lista = refs(paginas[i].dict, 'Contents');
+      tarefas.push(Promise.all(lista.map(function (r) { return conteudoDe(objs[r], bytes, objs); }))
+        .then(function (partes) { return partes.join('\n'); }));
+    }
+    return Promise.all(tarefas);
+  }).then(function (conteudos) {
+    var txt = [];
+    for (var i = 0; i < conteudos.length; i++) {
+      if (!conteudos[i]) continue;
+      var l = montarLinhas(extrairRuns(conteudos[i], fontesPorNome));
+      if (l) txt.push(l);
+    }
+    var todo = txt.join('\n');
+    if (!todo.replace(/\s/g, '')) return Promise.reject(new Error('sem-camada-de-texto'));
+    return todo;
+  });
+}
+
+raiz.MXPDF = { lerPdf: lerPdf, lerCMap: lerCMap, montarLinhas: montarLinhas,
+               extrairRuns: extrairRuns, dictBalanceado: dictBalanceado, subDict: subDict };
+if (typeof module !== 'undefined' && module.exports) module.exports.MXPDF = raiz.MXPDF;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
 
 <script>
 /* =========================================================================
@@ -889,9 +1243,13 @@ function parseAnalitico(txt){
       d.rubricas.push({cod:m[1],nome:nome,ref:m[3],refN:nh(m[3]),valor:nb(m[4]),tipo:tipo,grupo:grupo});
       continue;
     }
-    // linha de férias:  dd/mm/aaaa a dd/mm/aaaa  dias [faltas]  perc
-    var f=/^\s*(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})\s+([\d.,]+)(?:\s+(\d+))?\s+([\d.,]+)\s*$/.exec(l);
-    if(f){ d.ferias.push({ini:pd(f[1]),fim:pd(f[2]),dias:nb(f[3]),faltas:f[4]?+f[4]:0,perc:nb(f[5])}); continue; }
+    /* período de férias: dd/mm/aaaa a dd/mm/aaaa  dias [faltas]  perc.
+       Não fica ancorado no início da linha: lendo o PDF direto, a tabela de
+       férias vem na mesma linha da coluna da esquerda. Por isso também não
+       interrompe o laço — a linha ainda pode trazer um "Rótulo: valor". */
+    var reFer=/(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})\s+([\d.,]+)(?:\s+(\d+))?\s+([\d.,]+)/g, f;
+    while((f=reFer.exec(l)))
+      d.ferias.push({ini:pd(f[1]),fim:pd(f[2]),dias:nb(f[3]),faltas:f[4]?+f[4]:0,perc:nb(f[5])});
 
     // pares  Rótulo: valor
     var re=/([A-Za-zÀ-ÿ0-9º°%.\s\/]+?):\s*([\d.,]+)/g, p;
@@ -2861,7 +3219,8 @@ function voltarEntrada(){
   $('#telaEntrada').hidden=false;
   $('#btNovo').hidden=true; $('#btPrint').hidden=true;
   $('#txt').value=''; $('#msg1').innerHTML='';
-  $('#txt').focus();
+  $('#areaTexto').hidden=true;
+  $('#bAbrir').focus();
 }
 
 /* Alguns motores não revalidam a propriedade `color` já computada quando as custom
@@ -2910,9 +3269,12 @@ function ligarUI(){
   });
 
   $('#bLer').onclick=processar;
-  $('#bEx1').onclick=function(){$('#txt').value=EX1;processar();};
-  $('#bEx2').onclick=function(){$('#txt').value=EX2;processar();};
+  $('#bEx1').onclick=function(){mostrarTexto();$('#txt').value=EX1;processar();};
+  $('#bEx2').onclick=function(){mostrarTexto();$('#txt').value=EX2;processar();};
   $('#bLimpar').onclick=function(){$('#txt').value='';$('#msg1').innerHTML='';$('#txt').focus();};
+  $('#bColar').onclick=function(){mostrarTexto();$('#txt').focus();};
+  $('#bAbrir').onclick=function(){$('#fArquivo').click();};
+  $('#fArquivo').onchange=function(){ if(this.files&&this.files.length) abrirArquivos(this.files); this.value=''; };
 
   $$('#filtros button').forEach(function(b){
     b.onclick=function(){aplicaFiltro(b.getAttribute('data-f'));};
@@ -2923,7 +3285,7 @@ function ligarUI(){
     if($('#telaEntrada').hidden) return;
     if(e.target===$('#txt')) return;
     var txt=(e.clipboardData||window.clipboardData).getData('text');
-    if(txt&&txt.length>80){ e.preventDefault(); $('#txt').value=txt; processar(); }
+    if(txt&&txt.length>80){ e.preventDefault(); mostrarTexto(); $('#txt').value=txt; processar(); }
   });
 
   /* arrastar um .txt */
@@ -2935,11 +3297,82 @@ function ligarUI(){
     dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('over');});
   });
   dz.addEventListener('drop',function(e){
-    var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
-    if(!f||!window.FileReader) return;
+    var fs=e.dataTransfer&&e.dataTransfer.files;
+    if(fs&&fs.length) abrirArquivos(fs);
+  });
+}
+
+/* --------------------------- abrir arquivos ----------------------------- */
+function mostrarTexto(){ $('#areaTexto').hidden=false; }
+
+/* pontuação: o quanto o texto parece um relatório analítico de rescisão */
+function pontuarRelatorio(txt){
+  if(!txt) return -1;
+  var t=txt.toUpperCase(), p=0;
+  if(/RELAT[ÓO]RIO\s+ANAL[ÍI]TICO/.test(t)) p+=50;
+  if(/C[ÁA]LCULO\s+DE\s+RESCIS[ÃA]O/.test(t)) p+=25;
+  if(/MEM[ÓO]RIA\s+DE\s+C[ÁA]LCULO\s+DE\s+M[ÉE]DIAS/.test(t)) p-=60;   /* memória de médias */
+  if(/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/.test(t)) p-=40;        /* TRCT */
+  if(/DATA\s+ADMISS[ÃA]O/.test(t)) p+=10;
+  if(/L[ÍI]QUIDO\s+RESCIS[ÃA]O/.test(t)) p+=10;
+  if(/TOTAIS:/.test(t)) p+=5;
+  var rubricas=(txt.match(/^\s*\d{1,6}\s+[A-Za-zÀ-ÿ].*\d[\d.,]*\s*$/gm)||[]).length;
+  return p+Math.min(rubricas,40);
+}
+
+function abrirArquivos(lista){
+  var arquivos=[].slice.call(lista);
+  if(!arquivos.length) return;
+  if(typeof DecompressionStream==='undefined'&&/\.pdf$/i.test(arquivos[0].name)){
+    msg('err','Este navegador não consegue descompactar o PDF. Atualize o navegador, ou abra o PDF, copie o texto e use <b>ou colar o texto</b>.');
+    mostrarTexto(); return;
+  }
+  msg('ok','Lendo '+plural(arquivos.length,'arquivo','arquivos')+'…');
+
+  Promise.all(arquivos.map(function(f){
+    return lerArquivo(f).then(function(txt){ return {nome:f.name, txt:txt, pontos:pontuarRelatorio(txt)}; },
+                              function(e){ return {nome:f.name, erro:e&&e.message||'falha'}; });
+  })).then(function(res){
+    var bons=res.filter(function(r){return r.txt&&r.pontos>0;});
+    bons.sort(function(a,b){return b.pontos-a.pontos;});
+    if(!bons.length){
+      var motivos={'pdf-protegido':'o PDF está protegido por senha',
+                   'sem-camada-de-texto':'o PDF é uma imagem digitalizada, sem texto',
+                   'nao-e-pdf':'o arquivo não é um PDF',
+                   'sem-paginas':'não consegui interpretar a estrutura do PDF',
+                   'sem-decompression-stream':'este navegador não descompacta o PDF'};
+      var det=res.map(function(r){
+        return '<b>'+esc(r.nome)+'</b>: '+(r.erro?(motivos[r.erro]||r.erro)
+               :'não parece um relatório analítico de rescisão');
+      }).join('<br>');
+      msg('err','Não achei um relatório analítico utilizável.<br>'+det+
+        '<br><br>Se o arquivo estiver certo, abra o PDF, copie o texto e use <b>ou colar o texto</b>.');
+      mostrarTexto();
+      return;
+    }
+    $('#txt').value=bons[0].txt;
+    var d=processar();
+    if(d){
+      var extra=res.length>1?' Ignorei '+plural(res.length-1,'outro arquivo','outros arquivos')+'.':'';
+      msg('ok','Li <b>'+esc(bons[0].nome)+'</b>.'+extra+' Confira os dados lidos na coluna do cálculo.');
+    }
+  });
+}
+
+function lerArquivo(f){
+  if(!window.FileReader) return Promise.reject(new Error('sem-filereader'));
+  return new Promise(function(ok,err){
     var fr=new FileReader();
-    fr.onload=function(){$('#txt').value=fr.result;processar();};
-    fr.readAsText(f);
+    fr.onerror=function(){err(new Error('falha-na-leitura'));};
+    if(/\.pdf$/i.test(f.name)||f.type==='application/pdf'){
+      fr.onload=function(){
+        try{ window.MXPDF.lerPdf(fr.result).then(ok,err); }catch(e){ err(e); }
+      };
+      fr.readAsArrayBuffer(f);
+    } else {
+      fr.onload=function(){ok(String(fr.result));};
+      fr.readAsText(f);
+    }
   });
 }
 
@@ -3209,6 +3642,69 @@ function autoteste(){
 
   x=clone(d1); x.admissao=pd('08/09/2020');
   T('E18 aviso proporcional (5 anos) cobrado',achaSev(auditar(x).findings,/Dias de aviso/,'erro')!=null);
+
+  /* --- extrator de PDF --- */
+  var PDF=(typeof window!=='undefined'&&window.MXPDF)||null;
+  T('PDF módulo disponível',!!PDF);
+  if(PDF){
+    T('PDF dicionário balanceado',
+      PDF.dictBalanceado('<< /A << /B 1 >> /C 2 >> resto',0)==='<< /A << /B 1 >> /C 2 >>',
+      PDF.dictBalanceado('<< /A << /B 1 >> /C 2 >> resto',0));
+    T('PDF subDict atravessa sub-dicionário',
+      PDF.subDict('<< /ColorSpace << /CS1 [/Pattern] >> /Font <</F9 9 0 R>> >>','Font')==='<</F9 9 0 R>>',
+      PDF.subDict('<< /ColorSpace << /CS1 [/Pattern] >> /Font <</F9 9 0 R>> >>','Font'));
+    T('PDF subDict inexistente',PDF.subDict('<< /A 1 >>','Font')===null);
+    var cm=PDF.lerCMap('beginbfchar <0003> <0020> <0024> <0041> endbfchar');
+    T('PDF CMap bfchar',cm[3]===' '&&cm[36]==='A',JSON.stringify([cm[3],cm[36]]));
+    var cr=PDF.lerCMap('beginbfrange <0010> <0013> <0061> endbfrange');
+    T('PDF CMap bfrange sequencial',cr[16]==='a'&&cr[19]==='d',JSON.stringify([cr[16],cr[19]]));
+    var cl=PDF.lerCMap('beginbfrange <0020> <0021> [<0058> <0059>] endbfrange');
+    T('PDF CMap bfrange com lista',cl[32]==='X'&&cl[33]==='Y');
+    var runs=PDF.extrairRuns('BT /F1 10 Tf 1 0 0 1 50 700 Tm (AB) Tj 1 0 0 1 120 700 Tm (12,34) Tj ET',{});
+    T('PDF extrai dois runs na mesma linha',runs.length===2&&runs[0].t==='AB'&&runs[1].t==='12,34',JSON.stringify(runs));
+    T('PDF posição vem da matriz Tm',runs[0].x===50&&runs[0].y===700&&runs[1].x===120);
+    T('PDF monta a linha com separação',PDF.montarLinhas(runs)==='AB 12,34',PDF.montarLinhas(runs));
+    var r2l=PDF.extrairRuns('BT 1 0 0 1 10 700 Tm (linha um) Tj 1 0 0 1 10 680 Tm (linha dois) Tj ET',{});
+    T('PDF separa linhas por y',PDF.montarLinhas(r2l)==='linha um\nlinha dois',JSON.stringify(PDF.montarLinhas(r2l)));
+    T('PDF ordena de cima para baixo',
+      PDF.montarLinhas(PDF.extrairRuns('BT 1 0 0 1 10 100 Tm (baixo) Tj 1 0 0 1 10 700 Tm (alto) Tj ET',{}))==='alto\nbaixo');
+    var rtj=PDF.extrairRuns('BT 1 0 0 1 10 700 Tm [(A) -300 (B)] TJ ET',{});
+    T('PDF deslocamento grande no TJ vira espaço',rtj[0].t==='A B',JSON.stringify(rtj[0]));
+    var rk=PDF.extrairRuns('BT 1 0 0 1 10 700 Tm [(A) -20 (B)] TJ ET',{});
+    T('PDF kerning pequeno não vira espaço',rk[0].t==='AB',JSON.stringify(rk[0]));
+    var fontes={F1:{doisBytes:true,cmap:{3:' ',36:'A',37:'B'}}};
+    var rc=PDF.extrairRuns('BT /F1 10 Tf 1 0 0 1 10 700 Tm <002400250003> Tj ET',fontes);
+    T('PDF decodifica CID de 2 bytes pelo CMap',rc[0].t==='AB ',JSON.stringify(rc[0].t));
+    var rl1=PDF.extrairRuns('BT 1 0 0 1 10 700 Tm (a\\(b\\)c) Tj ET',{});
+    T('PDF string literal com parênteses escapados',rl1[0].t==='a(b)c',rl1[0].t);
+    var roct=PDF.extrairRuns('BT 1 0 0 1 10 700 Tm (\\101\\102) Tj ET',{});
+    T('PDF string literal com octal',roct[0].t==='AB',roct[0].t);
+    T('PDF rejeita arquivo que não é PDF',(function(){
+      var b=new Uint8Array([1,2,3]); var deu=false;
+      PDF.lerPdf(b.buffer)['catch'](function(){deu=true;});
+      return true;})());
+  }
+
+  /* --- escolha do arquivo certo entre vários --- */
+  T('PDF pontua relatório analítico acima de tudo',
+    pontuarRelatorio('RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO\nData admissão: 01/01/2026\nTotais: 1,00 0,00')>50);
+  T('PDF descarta memória de médias',pontuarRelatorio('MEMÓRIA DE CÁLCULO DE MÉDIAS\nRubrica: 301')<0);
+  T('PDF descarta o TRCT',pontuarRelatorio('TERMO DE RESCISÃO DO CONTRATO DE TRABALHO\nVerbas rescisórias')<0);
+  T('PDF relatório real pontua bem',pontuarRelatorio(EX1)>50,pontuarRelatorio(EX1));
+  T('PDF texto vazio não pontua',pontuarRelatorio('')<0);
+  T('PDF escolhe o analítico entre os dois',pontuarRelatorio(EX1)>pontuarRelatorio('MEMÓRIA DE CÁLCULO DE MÉDIAS'));
+
+  /* --- período de férias na mesma linha da coluna da esquerda (PDF direto) --- */
+  var EXPDF=EX1.replace('08/09/2025 a 28/07/2026 27,50 2 33,33',
+                        'Abat. IRRF Mensal: 171,28 08/09/2025 a 28/07/2026 27,50 2 33,33');
+  var dPdf=parseAnalitico(EXPDF);
+  T('PDF férias lidas fora do início da linha',dPdf.ferias.length===1&&dPdf.ferias[0].faltas===2,
+    JSON.stringify(dPdf.ferias));
+  T('PDF rótulo da mesma linha continua lido',dPdf.bases['Abat. IRRF Mensal']===171.28,
+    dPdf.bases['Abat. IRRF Mensal']);
+  T('PDF demais dados intactos',dPdf.rubricas.length===34&&dPdf.totalP===12510.85);
+  T('PDF auditoria idêntica à do texto colado',
+    (function(){var a=auditar(parseAnalitico(EX1)).findings.length, b=auditar(dPdf).findings.length; return a===b;}));
 
   /* --- fatos do contrato: estabilidades, tipo de contrato, procedimento --- */
   function comFatos(dados,mot){
