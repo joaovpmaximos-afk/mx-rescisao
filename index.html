@@ -1551,6 +1551,54 @@ function parseMedias(txt){
   return m;
 }
 
+/* ===================== extrato do FGTS =================================
+   Sem o extrato, a conferência da multa é circular: compara o cálculo com
+   o saldo que o próprio cálculo declarou. O extrato é a fonte externa. */
+function parseFgts(txt){
+  if(!txt) return null;
+  var t=txt.toUpperCase();
+  var pareceExtrato=/FGTS/.test(t)&&(/EXTRATO/.test(t)||/COMPET[ÊE]NCIA/.test(t)||/DEP[ÓO]SITO/.test(t));
+  if(!pareceExtrato) return null;
+  var linhas=txt.replace(/\r/g,'').split('\n');
+  var e={competencias:[], saldo:null, fonte:'documento'};
+  var vistos={};
+  for(var i=0;i<linhas.length;i++){
+    var l=linhas[i], lu=l.toUpperCase();
+    var vals=l.match(/\d[\d.]*,\d{2}/g)||[];
+    /* saldo: a linha que fala de saldo e traz valor */
+    if(/SALDO/.test(lu)&&vals.length){
+      var v=nb(vals[vals.length-1]);
+      if(e.saldo==null||v>e.saldo) e.saldo=v;
+    }
+    /* competência MM/AAAA com valor: assume o último valor da linha */
+    var mc=/(^|[^\d\/])(0[1-9]|1[0-2])\/(19|20)\d{2}([^\d\/]|$)/.exec(l);
+    if(mc&&vals.length){
+      var mm=/(0[1-9]|1[0-2])\/((?:19|20)\d{2})/.exec(l);
+      var chave=mm[1]+'/'+mm[2];
+      if(!vistos[chave]){
+        vistos[chave]=1;
+        e.competencias.push({comp:chave, mes:+mm[1], ano:+mm[2], valor:nb(vals[vals.length-1])});
+      }
+    }
+  }
+  if(e.saldo==null&&!e.competencias.length) return null;
+  e.competencias.sort(function(a,b){ return (a.ano-b.ano)||(a.mes-b.mes); });
+  return e;
+}
+/* lista de competências entre duas datas, no formato MM/AAAA */
+function competenciasEntre(ini,fim){
+  var o=[];
+  if(!ini||!fim) return o;
+  var y=ini.getUTCFullYear(), m=ini.getUTCMonth(), guard=0;
+  while(guard++<600){
+    var d=new Date(Date.UTC(y,m,1));
+    if(d>fim) break;
+    o.push(('0'+(m+1)).slice(-2)+'/'+y);
+    m++; if(m>11){ m=0; y++; }
+  }
+  return o;
+}
+
 /* de que grupo do analítico cada caixa do TRCT deve sair */
 var TRCT_MAPA={
   '50':{g:'saldo',  rot:'Saldo de salário'},
@@ -2661,6 +2709,76 @@ function auditar(d){
     });
   }
 
+  /* ---- N. extrato do FGTS ---- */
+  G='Extrato do FGTS';
+  var ex=d.fgts, saldoDecl=B['Saldo FGTS'];
+  var fgtsResc=r2((B['FGTS Mensal']||0)+(B['FGTS 13º']||0)+(B['FGTS Aviso Prévio']||0));
+
+  if(!ex||(ex.saldo==null&&!(ex.competencias||[]).length)){
+    if(reg.multa>0)
+      add('alerta',G,'Multa do FGTS conferida contra o próprio cálculo',
+        'Sem o extrato, o saldo usado na multa ('+mo(saldoDecl||0)+') é o que o próprio cálculo declarou — '+
+        'a conferência fica circular e um saldo errado passa despercebido. A multa é a maior verba desta rescisão.',
+        null,null,'Art. 18, §1º, da Lei 8.036/90',
+        'Informe o saldo do extrato no bloco "Extrato do FGTS", ou solte o PDF do extrato junto com os outros.');
+  } else {
+    if(ex.saldo!=null&&saldoDecl!=null){
+      cmp('erro',G,'Saldo do FGTS: extrato × cálculo',saldoDecl,ex.saldo,
+        'O cálculo declara '+mo(saldoDecl)+' e o extrato mostra '+mo(ex.saldo)+'.',
+        'Art. 18, §1º, da Lei 8.036/90 — a multa incide sobre todos os depósitos do contrato.',
+        'O saldo errado leva a multa junto.',0.05);
+      if(reg.multa>0&&!ok2(saldoDecl,ex.saldo,0.05)){
+        var baseCerta=r2(ex.saldo+fgtsResc), multaCerta=r2(baseCerta*reg.multa/100);
+        var multaLanc=reg.multa===20?(B['FGTS 20%']||0):(B['FGTS 40%']||0);
+        add('erro',G,'Multa de '+reg.multa+'% recalculada pelo extrato',
+          'Saldo do extrato '+mo(ex.saldo)+' + FGTS da rescisão '+mo(fgtsResc)+' = '+mo(baseCerta)+
+          ' × '+reg.multa+'%.',
+          multaLanc,multaCerta,'Art. 18, §1º e §2º, da Lei 8.036/90',
+          'Refaça a multa com o saldo do extrato.');
+      }
+    } else if(ex.saldo==null)
+      add('alerta',G,'Extrato sem saldo identificado',
+        'Li as competências mas não achei o saldo. Informe o saldo à mão para conferir a multa.',
+        null,null,'Art. 18, §1º, da Lei 8.036/90','');
+
+    var comps=ex.competencias||[];
+    if(comps.length&&d.admissao&&d.demissao){
+      /* o mês do afastamento costuma ser recolhido junto com a rescisão:
+         cobra-se até o mês anterior */
+      var ultimo=new Date(Date.UTC(d.demissao.getUTCFullYear(),d.demissao.getUTCMonth()-1,1));
+      var esperadas=competenciasEntre(new Date(Date.UTC(d.admissao.getUTCFullYear(),d.admissao.getUTCMonth(),1)),ultimo);
+      var tem={};
+      for(i=0;i<comps.length;i++) tem[comps[i].comp]=comps[i];
+      var faltando=[];
+      for(i=0;i<esperadas.length;i++) if(!tem[esperadas[i]]) faltando.push(esperadas[i]);
+      if(faltando.length)
+        add('erro',G,plural(faltando.length,'competência sem depósito','competências sem depósito'),
+          'Não há depósito de: '+faltando.slice(0,8).join(', ')+(faltando.length>8?' e mais '+(faltando.length-8):'')+'.',
+          null,null,'Art. 15 da Lei 8.036/90 — depósito mensal obrigatório.',
+          'Confira se houve afastamento sem remuneração nesses meses; se não houve, o FGTS não foi recolhido e entra na base da multa.');
+      else
+        add('ok',G,'Depósitos mensais',plural(esperadas.length,'competência conferida','competências conferidas')+
+          ', de '+esperadas[0]+' a '+esperadas[esperadas.length-1]+'.');
+
+      /* depósito muito abaixo de 8% do salário base merece olhada */
+      if(sal>0){
+        var minimo=r2(sal*CFG.fgts/100*0.9), baixos=[];
+        for(i=0;i<comps.length;i++) if(comps[i].valor>0&&comps[i].valor<minimo) baixos.push(comps[i].comp);
+        if(baixos.length)
+          add('alerta',G,plural(baixos.length,'competência com depósito abaixo do esperado','competências com depósito abaixo do esperado'),
+            baixos.slice(0,8).join(', ')+(baixos.length>8?' e mais '+(baixos.length-8):'')+
+            '. Referência: '+CFG.fgts+'% de '+mo(sal)+' = '+mo(r2(sal*CFG.fgts/100))+'.',
+            null,null,'Art. 15 da Lei 8.036/90',
+            'A base varia com faltas, afastamentos e mês incompleto — confira só os que não tiverem explicação.');
+      }
+      var somaDep=0;
+      for(i=0;i<comps.length;i++) somaDep+=comps[i].valor;
+      add('info',G,'Depósitos lidos no extrato',
+        plural(comps.length,'competência','competências')+' somando '+mo(somaDep)+
+        (ex.saldo!=null?'. O saldo de '+mo(ex.saldo)+' inclui juros e atualização, e desconta saques — os dois números não têm de bater.':'.'));
+    }
+  }
+
   /* ---- G. fechamento ---- */
   G='Fechamento';
   var somaP=0,somaD=0;
@@ -3010,6 +3128,23 @@ function renderCalculo(d,res){
     h+='</tbody></table></div>';
   }
 
+  /* extrato do FGTS: lido do PDF ou com o saldo digitado à mão */
+  var saldoDoc=d.bases['Saldo FGTS'];
+  h+='<div class="card"><h3>Extrato do FGTS'+(d.fgts&&d.fgts.competencias&&d.fgts.competencias.length?' · '+plural(d.fgts.competencias.length,'competência','competências'):'')+'</h3>'+
+     '<div class="card-body">';
+  if(d.fgts&&d.fgts.competencias&&d.fgts.competencias.length){
+    h+='<div class="kvs">'+
+       kv('Saldo no extrato',d.fgts.saldo!=null?mo(d.fgts.saldo):'não identificado',1)+
+       kv('Saldo no cálculo',saldoDoc!=null?mo(saldoDoc):'—',1)+'</div>';
+  } else {
+    h+='<p style="margin:0 0 10px;color:var(--tx2);font-size:12.5px">'+
+       'A multa rescisória incide sobre o saldo da conta vinculada. Sem o extrato, o app confere a multa contra o saldo que o próprio cálculo declarou ('+
+       (saldoDoc!=null?mo(saldoDoc):'não informado')+') — o que é circular. Informe o saldo do extrato para conferir de fora, ou solte o PDF do extrato.</p>'+
+       '<label for="fgtsSaldo">Saldo do extrato do FGTS (R$)</label>'+
+       '<input id="fgtsSaldo" value="'+(d.fgts&&d.fgts.saldo!=null?mo(d.fgts.saldo):'')+'" placeholder="'+(saldoDoc!=null?mo(saldoDoc):'0,00')+'">';
+  }
+  h+='</div></div>';
+
   /* bases */
   var mostrar=['Saldo FGTS','Base FGTS Mensal','FGTS Mensal','Base FGTS 13º','FGTS 13º',
     'Base FGTS Aviso Prévio','FGTS Aviso Prévio','FGTS 40%','FGTS 20%',
@@ -3053,6 +3188,16 @@ function renderCalculo(d,res){
     lembrarCct(ATUAL);
     renderTudo(ATUAL);
   };
+
+  /* saldo do FGTS digitado à mão: só reconfere ao sair do campo */
+  var fs=$('#fgtsSaldo');
+  if(fs) fs.addEventListener('change',function(){
+    var v=nb(fs.value);
+    ATUAL.fgts = v>0 ? {saldo:v, competencias:[], fonte:'manual'} : null;
+    var col=$('.col-calc'), y=col?col.scrollTop:0;
+    renderTudo(ATUAL);
+    var col2=$('.col-calc'); if(col2) col2.scrollTop=y;
+  });
 }
 function seletorCct(d){
   var h='<select id="selCct"><option value="">— nenhuma (só CLT) —</option>';
@@ -3883,6 +4028,27 @@ var EXMED=[
 'Total: 3.215,55 1.875,75'
 ].join('\n');
 
+/* extrato de FGTS sintético, coerente com o caso do EX1 (saldo 2.344,38,
+   admissão 09/2025, afastamento 07/2026) */
+var EXFGTS=[
+'CAIXA ECONÔMICA FEDERAL',
+'EXTRATO PARA FINS RESCISÓRIOS - CONTA VINCULADA DO FGTS',
+'Empregador: PAISAGISMO EXEMPLO LTDA',
+'Trabalhador: FULANO DE TAL',
+'Competência Depósito Data',
+'09/2025 245,20 07/10/2025',
+'10/2025 245,20 06/11/2025',
+'11/2025 245,20 05/12/2025',
+'12/2025 245,20 07/01/2026',
+'01/2026 245,20 06/02/2026',
+'02/2026 245,20 05/03/2026',
+'03/2026 245,20 07/04/2026',
+'04/2026 245,20 06/05/2026',
+'05/2026 245,20 05/06/2026',
+'06/2026 245,20 07/07/2026',
+'SALDO PARA FINS RESCISÓRIOS: 2.344,38'
+].join('\n');
+
 /* --------------------------------- boot --------------------------------- */
 function msg(cls,txt){$('#msg1').innerHTML='<div class="msg '+cls+'">'+txt+'</div>';}
 
@@ -3893,6 +4059,7 @@ function processar(){
   d.fatos=fatosPadrao();
   d.trct=TRCT_PENDENTE; TRCT_PENDENTE=null;
   d.medias=MEDIAS_PENDENTES; MEDIAS_PENDENTES=[];
+  d.fgts=FGTS_PENDENTE; FGTS_PENDENTE=null;
   ABERTOS={};
   renderTudo(d);
   window.scrollTo({top:0,behavior:'auto'});
@@ -3987,7 +4154,7 @@ function ligarUI(){
 }
 
 /* --------------------------- abrir arquivos ----------------------------- */
-var TRCT_PENDENTE=null, MEDIAS_PENDENTES=[];   /* lidos junto com o analítico, anexados no processar() */
+var TRCT_PENDENTE=null, MEDIAS_PENDENTES=[], FGTS_PENDENTE=null;   /* lidos junto com o analítico, anexados no processar() */
 function mostrarTexto(){ $('#areaTexto').hidden=false; }
 
 /* pontuação: o quanto o texto parece um relatório analítico de rescisão */
@@ -3998,11 +4165,12 @@ function pontuarRelatorio(txt){
   if(/C[ÁA]LCULO\s+DE\s+RESCIS[ÃA]O/.test(t)) p+=25;
   if(/MEM[ÓO]RIA\s+DE\s+C[ÁA]LCULO\s+DE\s+M[ÉE]DIAS/.test(t)) p-=60;   /* memória de médias */
   if(/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/.test(t)) p-=40;        /* TRCT */
+  if(/EXTRATO.*FGTS|CONTA\s+VINCULADA/.test(t)) p-=60;                 /* extrato do FGTS */
   if(/DATA\s+ADMISS[ÃA]O/.test(t)) p+=10;
   if(/L[ÍI]QUIDO\s+RESCIS[ÃA]O/.test(t)) p+=10;
   if(/TOTAIS:/.test(t)) p+=5;
   var rubricas=(txt.match(/^\s*\d{1,6}\s+[A-Za-zÀ-ÿ].*\d[\d.,]*\s*$/gm)||[]).length;
-  return p+Math.min(rubricas,40);
+  return p+Math.min(rubricas,40)||-1;
 }
 /* o quanto o texto parece uma memória de cálculo de médias */
 function pontuarMedias(txt){
@@ -4014,6 +4182,20 @@ function pontuarMedias(txt){
   if(/RESULTADO\s+DO\s+C[ÁA]LCULO/.test(t)) p+=15;
   if(/RELAT[ÓO]RIO\s+ANAL[ÍI]TICO/.test(t)) p-=60;
   if(/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/.test(t)) p-=60;
+  return p;
+}
+/* o quanto o texto parece um extrato de FGTS */
+function pontuarFgts(txt){
+  if(!txt) return -1;
+  var t=txt.toUpperCase();
+  if(!/FGTS|FUNDO\s+DE\s+GARANTIA/.test(t)) return -1;
+  if(/RELAT[ÓO]RIO\s+ANAL[ÍI]TICO|TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO|MEM[ÓO]RIA\s+DE\s+C[ÁA]LCULO/.test(t)) return -1;
+  var p=0;
+  if(/EXTRATO/.test(t)) p+=40;
+  if(/CAIXA\s+ECON[ÔO]MICA|\bCEF\b/.test(t)) p+=15;
+  if(/CONTA\s+VINCULADA/.test(t)) p+=15;
+  if(/SALDO/.test(t)) p+=10;
+  if(/DEP[ÓO]SITO/.test(t)) p+=10;
   return p;
 }
 /* o quanto o texto parece um Termo de Rescisão (TRCT) */
@@ -4041,7 +4223,8 @@ function abrirArquivos(lista){
   Promise.all(arquivos.map(function(f){
     return lerArquivo(f).then(function(txt){
         return {nome:f.name, txt:txt, pontos:pontuarRelatorio(txt),
-                pontosTrct:pontuarTrct(txt), pontosMed:pontuarMedias(txt)}; },
+                pontosTrct:pontuarTrct(txt), pontosMed:pontuarMedias(txt),
+                pontosFgts:pontuarFgts(txt)}; },
       function(e){ return {nome:f.name, erro:e&&e.message||'falha'}; });
   })).then(function(res){
     var bons=res.filter(function(r){return r.txt&&r.pontos>0;});
@@ -4050,6 +4233,8 @@ function abrirArquivos(lista){
     trcts.sort(function(a,b){return b.pontosTrct-a.pontosTrct;});
     /* memórias entram todas: uma por verba (13º, férias, aviso) */
     var medias=res.filter(function(r){return r.txt&&r.pontosMed>0;});
+    var extratos=res.filter(function(r){return r.txt&&r.pontosFgts>0;});
+    extratos.sort(function(a,b){return b.pontosFgts-a.pontosFgts;});
     if(!bons.length){
       var motivos={'pdf-protegido':'o PDF está protegido por senha',
                    'sem-camada-de-texto':'o PDF é uma imagem digitalizada, sem texto',
@@ -4074,15 +4259,17 @@ function abrirArquivos(lista){
       var pm=parseMedias(medias[im].txt);
       if(pm) MEDIAS_PENDENTES.push(pm);
     }
-    var temTrct=!!TRCT_PENDENTE, nMed=MEDIAS_PENDENTES.length;   /* processar() consome */
+    FGTS_PENDENTE=extratos.length?parseFgts(extratos[0].txt):null;
+    var temTrct=!!TRCT_PENDENTE, nMed=MEDIAS_PENDENTES.length, temFgts=!!FGTS_PENDENTE;   /* processar() consome */
     var d=processar();
     if(d){
-      var usados=1+(temTrct?1:0)+nMed;
+      var usados=1+(temTrct?1:0)+nMed+(temFgts?1:0);
       var partes=['Li <b>'+esc(bons[0].nome)+'</b>'];
       partes.push(temTrct?'conferi contra <b>'+esc(trcts[0].nome)+'</b>'
-                         :'<b>sem o TRCT</b>, que fica sem conferência');
-      partes.push(nMed?'e refiz '+plural(nMed,'memória de médias','memórias de médias')
-                      :'e <b>sem as memórias de médias</b>');
+                         :'<b>sem o TRCT</b>');
+      partes.push(nMed?'refiz '+plural(nMed,'memória de médias','memórias de médias')
+                      :'<b>sem as memórias</b>');
+      if(temFgts) partes.push('e cruzei o <b>extrato do FGTS</b>');
       var extra=res.length>usados?' Ignorei '+plural(res.length-usados,'outro arquivo','outros arquivos')+'.':'';
       msg('ok',partes.join(', ')+'.'+extra);
     }
@@ -4274,11 +4461,12 @@ function autoteste(){
   /* --- contagem e veredito --- */
   var cg1=contagem(F1), cg2=contagem(F2);
   T('V1 caso correto sem erro',cg1.erro===0,cg1.erro);
-  T('V1 alertas são só os pedidos de informação',cg1.alerta===4
+  T('V1 alertas são só os pedidos de informação',cg1.alerta===5
       &&acha(F1,/Nenhuma conven[çc][ãa]o coletiva aplicada/)!=null
       &&acha(F1,/Nenhum fato do contrato informado/)!=null
       &&acha(F1,/TRCT não conferido/)!=null
-      &&acha(F1,/Memórias de médias não conferidas/)!=null,
+      &&acha(F1,/Memórias de médias não conferidas/)!=null
+      &&acha(F1,/Multa do FGTS conferida contra o próprio cálculo/)!=null,
     (function(){var s=[];for(var i=0;i<F1.length;i++)if(F1[i].sev==='alerta')s.push(F1[i].titulo);return s.join(' | ');})());
   T('V1 impacto zero no caso correto',ok2(cg1.impacto,0),cg1.impacto);
   T('V2 impacto = 53,77',ok2(cg2.impacto,53.77,0.02),cg2.impacto);
@@ -4611,6 +4799,65 @@ function autoteste(){
   T('ME memória não é confundida com analítico nem com termo',
     pontuarRelatorio(EXMED)<0&&pontuarTrct(EXMED)<0);
 
+  /* --- extrato do FGTS --- */
+  var FG=parseFgts(EXFGTS);
+  T('FG reconhece o extrato',FG!=null);
+  T('FG ignora quem não é extrato',parseFgts(EX1)===null&&parseFgts(EXTRCT)===null);
+  T('FG leu o saldo',FG.saldo===2344.38,FG.saldo);
+  T('FG leu as 10 competências',FG.competencias.length===10,FG.competencias.length);
+  T('FG competências em ordem',FG.competencias[0].comp==='09/2025'&&FG.competencias[9].comp==='06/2026');
+  T('FG valor de cada depósito',FG.competencias[0].valor===245.20);
+  T('FG competências entre datas',competenciasEntre(pd('08/09/2025'),pd('27/06/2026')).length===10);
+  T('FG competências não passa do fim',competenciasEntre(pd('01/09/2025'),pd('01/07/2026')).join(',').indexOf('07/2026')>=0);
+
+  function comFgts(mudar,mot){
+    var x=clone(d1);
+    var e=JSON.parse(JSON.stringify(parseFgts(EXFGTS)));
+    if(mudar) mudar(e);
+    x.fgts=e;
+    if(mot) x.motivo=mot;
+    return auditar(x).findings.filter(function(f){return f.grupo==='Extrato do FGTS';});
+  }
+  var Fg=comFgts(null);
+  T('FG saldo do extrato bate com o cálculo',achaSev(Fg,/Saldo do FGTS: extrato × cálculo/,'ok')!=null,
+    (function(){var f=acha(Fg,/Saldo do FGTS/);return f?f.dec+' vs '+f.esp:'-';})());
+  T('FG depósitos mensais completos',achaSev(Fg,/Dep[óo]sitos mensais/,'ok')!=null);
+  T('FG sem erro no caso correto',Fg.filter(function(f){return f.sev==='erro';}).length===0,
+    Fg.filter(function(f){return f.sev==='erro';}).map(function(f){return f.titulo;}).join(' | '));
+
+  T('FG acusa saldo divergente',achaSev(comFgts(function(e){e.saldo=1500;}),/Saldo do FGTS: extrato × cálculo/,'erro')!=null);
+  T('FG recalcula a multa com o saldo do extrato',
+    achaSev(comFgts(function(e){e.saldo=3000;}),/Multa de 40% recalculada pelo extrato/,'erro')!=null);
+  T('FG multa recalculada usa saldo + FGTS da rescisão',(function(){
+    var f=acha(comFgts(function(e){e.saldo=3000;}),/Multa de 40% recalculada/);
+    /* (3000 + 173,86 + 150,06 + 275,08) * 40% */
+    return f&&ok2(f.esp,r2((3000+173.86+150.06+275.08)*0.4),0.05);})(),
+    (function(){var f=acha(comFgts(function(e){e.saldo=3000;}),/Multa de 40% recalculada/);return f?f.esp:'-';})());
+  T('FG acusa competência faltando',
+    achaSev(comFgts(function(e){e.competencias=e.competencias.filter(function(c){return c.comp!=='03/2026';});}),
+      /competência sem depósito|competências sem depósito/,'erro')!=null);
+  T('FG acusa depósito abaixo do esperado',
+    achaSev(comFgts(function(e){e.competencias[2].valor=50;}),/abaixo do esperado/,'alerta')!=null);
+  T('FG saldo maior no acordo usa 20%',(function(){
+    var f=acha(comFgts(function(e){e.saldo=3000;},'acordo'),/Multa de 20% recalculada/);
+    return f!=null;})());
+
+  T('FG sem extrato: multa fica circular',
+    achaSev(auditar(clone(d1)).findings,/Multa do FGTS conferida contra o próprio cálculo/,'alerta')!=null);
+  T('FG sem extrato no pedido de demissão não cobra multa',
+    acha(auditar(clone(d2)).findings,/conferida contra o próprio cálculo/)==null);
+  T('FG saldo manual destrava a conferência',(function(){
+    var x=clone(d1); x.fgts={saldo:2344.38,competencias:[],fonte:'manual'};
+    return achaSev(auditar(x).findings,/Saldo do FGTS: extrato × cálculo/,'ok')!=null;})());
+  T('FG saldo manual errado acusa',(function(){
+    var x=clone(d1); x.fgts={saldo:1000,competencias:[],fonte:'manual'};
+    return achaSev(auditar(x).findings,/Multa de 40% recalculada pelo extrato/,'erro')!=null;})());
+
+  T('FG pontua o extrato acima dos outros documentos',
+    pontuarFgts(EXFGTS)>50&&pontuarFgts(EX1)<0&&pontuarFgts(EXTRCT)<0&&pontuarFgts(EXMED)<0);
+  T('FG extrato não é confundido com os outros parsers',
+    pontuarRelatorio(EXFGTS)<0&&pontuarTrct(EXFGTS)<0&&pontuarMedias(EXFGTS)<0);
+
   /* --- fatos do contrato: estabilidades, tipo de contrato, procedimento --- */
   function comFatos(dados,mot){
     var x=clone(d1); x.fatos=fatosPadrao();
@@ -4850,7 +5097,7 @@ function autoteste(){
     pis:['111.11111.11-1']
   };
   function soPermitidos(re,ok,g){
-    var achados=(EX1+EX2+EXTRCT+EXMED).match(re)||[];
+    var achados=(EX1+EX2+EXTRCT+EXMED+EXFGTS).match(re)||[];
     if(!achados.length) return false;
     for(var i=0;i<achados.length;i++){
       var v=achados[i].replace(g,'').trim();
@@ -4863,11 +5110,11 @@ function autoteste(){
   T('X exemplo 2 fictício',d2.nome===FICT.nomes[1]&&d2.cnpj===FICT.cnpjs[1]&&d2.empresa===FICT.empresas[1],
     d2.nome+' / '+d2.cnpj+' / '+d2.empresa);
   T('X só CNPJ fictício nos fixtures',soPermitidos(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g,FICT.cnpjs,/^$/),
-    ((EX1+EX2+EXTRCT+EXMED).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT+EXMED+EXFGTS).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g)||[]).join(' '));
   T('X só CTPS fictício nos fixtures',soPermitidos(/CTPS:\s*\d+/g,FICT.ctps,/CTPS:\s*/),
-    ((EX1+EX2+EXTRCT+EXMED).match(/CTPS:\s*\d+/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT+EXMED+EXFGTS).match(/CTPS:\s*\d+/g)||[]).join(' '));
   T('X só PIS fictício nos fixtures',soPermitidos(/PIS:\s*[\d.-]+/g,FICT.pis,/PIS:\s*/),
-    ((EX1+EX2+EXTRCT+EXMED).match(/PIS:\s*[\d.-]+/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT+EXMED+EXFGTS).match(/PIS:\s*[\d.-]+/g)||[]).join(' '));
   T('X nome do empregado é da lista fictícia',
     FICT.nomes.indexOf(d1.nome)>=0&&FICT.nomes.indexOf(d2.nome)>=0);
   T('X TRCT de exemplo também é fictício',
@@ -4915,10 +5162,10 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 /* exporta para o runner em Node */
 if(typeof module!=='undefined'&&module.exports){
   module.exports={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,
-    parseMedias:parseMedias,avaliarExpr:avaliarExpr,auditar:auditar,EX1:EX1,EX2:EX2};
+    parseMedias:parseMedias,parseFgts:parseFgts,avaliarExpr:avaliarExpr,auditar:auditar,EX1:EX1,EX2:EX2};
 }
 window.MXRESC={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,
-  parseMedias:parseMedias,avaliarExpr:avaliarExpr,auditar:auditar,
+  parseMedias:parseMedias,parseFgts:parseFgts,avaliarExpr:avaliarExpr,auditar:auditar,
   EX1:EX1,EX2:EX2,calcInss:calcInss,avos13:avos13,avosFerias:avosFerias};
 })();
 </script>

@@ -7,8 +7,8 @@ Conferidor automático de rescisão trabalhista. HTML único, offline, sem depen
 1. Abra `index.html` no navegador.
 2. Arraste **a pasta inteira do funcionário** para a tela — ou clique em **Abrir PDF…**.
    O app pontua cada arquivo e usa todos: o **relatório analítico** como base, o **TRCT**
-   para a conferência cruzada e as **memórias de médias** para refazer cada média.
-   No fim ele diz o que leu e o que ignorou.
+   para a conferência cruzada, as **memórias de médias** para refazer cada média e o
+   **extrato do FGTS** para conferir a multa de fora. No fim ele diz o que leu e o que ignorou.
 3. Se preferir, ainda dá para colar o texto: `Ctrl+V` funciona em qualquer ponto da página.
 
 A tela de resultado tem três partes:
@@ -107,6 +107,30 @@ reais de calibração isso apareceu de verdade — a memória imprime `16,621542
 que o analítico lança. O valor pago está certo; o papel entregue ao empregado é que traz a
 linha errada.
 
+## Extrato do FGTS
+
+A multa rescisória (40%, ou 20% no acordo) incide sobre **o saldo da conta vinculada** — a
+maior verba da rescisão. Sem o extrato, o app só sabe conferir a multa contra o saldo que o
+**próprio cálculo** declarou, o que é circular: um saldo errado leva a multa junto e a
+conferência aprova mesmo assim. O extrato é a única fonte externa que quebra esse círculo.
+
+Duas formas de trazer o saldo de fora:
+
+- **Solte o PDF do extrato** junto com os outros. O app lê o saldo e as competências.
+- **Digite o saldo à mão** no card *Extrato do FGTS*, se você só tem o número.
+
+Com o saldo de fora, ele:
+
+- **Saldo do extrato × cálculo** — se divergirem, **recalcula a multa** sobre o saldo do
+  extrato mais o FGTS da própria rescisão, e mostra a diferença.
+- **Competências sem depósito** — lista os meses do contrato (até o anterior ao afastamento)
+  que não têm depósito no extrato. FGTS não recolhido também entra na base da multa.
+- **Depósito abaixo do esperado** — sinaliza competências muito abaixo de 8% do salário, para
+  você conferir as que não tiverem explicação (falta, afastamento, mês incompleto).
+
+O saldo não tem de bater com a soma dos depósitos: ele inclui juros e atualização e desconta
+saques. Por isso a soma é informativa, e a conferência da multa usa o **saldo**.
+
 ## Fatos do contrato
 
 O relatório analítico traz números, não fatos. **A maior parte do que anula uma rescisão não
@@ -183,13 +207,15 @@ essas duas conferências saem como **atenção**, não como erro.
 - No navegador: `index.html?teste=1` — caixa de resultado no canto inferior direito.
 - No terminal: `node testar.js`
 
-390 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
+413 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
 (dicionários aninhados, CMap, larguras de glifo, matriz de texto, montagem de linhas, escolha
 do arquivo certo), parser dos dois
 relatórios reais, leitura do TRCT e a conferência cruzada (identificação, totais, caixa a caixa
 e reconciliação por conjunto, com dez cenários de divergência), leitura das memórias de médias
 (avaliador de expressões, extração das contas, quadro de resultado, divisor, jornada e nove
-cenários de divergência), auditoria completa dos dois
+cenários de divergência), leitura do extrato do FGTS e a conferência da multa contra o saldo
+externo (saldo do PDF ou digitado, recálculo da multa, competências faltando, doze cenários),
+auditoria completa dos dois
 casos, o vínculo achado→rubrica que alimenta o
 destaque cruzado, o veredito, as unidades dos achados, o módulo de convenções (vigência,
 piso, aviso ampliado, data-base, multa, assistencial, homologação, estabilidade, cláusulas
