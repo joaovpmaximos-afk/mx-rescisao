@@ -5,9 +5,10 @@ Conferidor automático de rescisão trabalhista. HTML único, offline, sem depen
 ## Como usar
 
 1. Abra `index.html` no navegador.
-2. Arraste o PDF do **Relatório Analítico do Cálculo de Rescisão** para a tela — ou clique em
-   **Abrir PDF…**. Pode soltar a pasta inteira do funcionário: o app pontua cada arquivo,
-   escolhe o relatório analítico e diz qual usou, ignorando as memórias de médias e o TRCT.
+2. Arraste **a pasta inteira do funcionário** para a tela — ou clique em **Abrir PDF…**.
+   O app pontua cada arquivo e usa todos: o **relatório analítico** como base, o **TRCT**
+   para a conferência cruzada e as **memórias de médias** para refazer cada média.
+   No fim ele diz o que leu e o que ignorou.
 3. Se preferir, ainda dá para colar o texto: `Ctrl+V` funciona em qualquer ponto da página.
 
 A tela de resultado tem três partes:
@@ -82,6 +83,29 @@ Solte os dois PDFs juntos. O app identifica qual é qual e cruza:
   e não discriminada, que não gera quitação (art. 477, §2º).
 
 Sem o TRCT o app avisa que essa camada ficou de fora, em vez de dar a rescisão por conferida.
+
+## Memórias de médias
+
+A memória imprime as próprias contas com os números dentro. O app **refaz cada uma** e ainda
+cruza o resultado com o analítico. Solte os PDFs de "Cálculo de Médias" junto com o resto.
+
+- **Aritmética impressa** — todas as fórmulas da memória são reavaliadas.
+- **O quadro contra ele mesmo** — salário, média de horas, média de valor e vantagem têm de
+  somar o total declarado.
+- **Quadro × analítico** — o total e cada componente contra as rubricas correspondentes.
+  Duas memórias de férias na mesma pasta são distinguidas pelo período aquisitivo:
+  a que termina na data do afastamento é a proporcional, a outra é a vencida.
+- **Divisor da média** — o número pelo qual a soma foi dividida contra a quantidade de meses
+  do período declarado. Divisor errado muda a média e tudo que ela alimenta.
+- **Jornada do valor-hora** — o divisor usado contra a jornada configurada.
+- **Cobertura** — verba que integra média e ficou sem memória vira pendência.
+
+Divergência na conta impressa sai como **atenção**, não como erro: se o resultado final ainda
+bate com o analítico, o dinheiro está certo e quem errou foi a linha impressa. Nos documentos
+reais de calibração isso apareceu de verdade — a memória imprime `16,621542 / 30 * 27,50 =
+15,246414`, quando a conta dá `15,236414`, e só o valor correto faz a soma fechar nos 53,18
+que o analítico lança. O valor pago está certo; o papel entregue ao empregado é que traz a
+linha errada.
 
 ## Fatos do contrato
 
@@ -159,11 +183,13 @@ essas duas conferências saem como **atenção**, não como erro.
 - No navegador: `index.html?teste=1` — caixa de resultado no canto inferior direito.
 - No terminal: `node testar.js`
 
-346 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
-(dicionários aninhados, CMap, matriz de texto, montagem de linhas, escolha do arquivo certo),
-parser dos dois
+390 verificações: utilitários, avos, art. 130, aviso proporcional, INSS, extrator de PDF
+(dicionários aninhados, CMap, larguras de glifo, matriz de texto, montagem de linhas, escolha
+do arquivo certo), parser dos dois
 relatórios reais, leitura do TRCT e a conferência cruzada (identificação, totais, caixa a caixa
-e reconciliação por conjunto, com dez cenários de divergência), auditoria completa dos dois
+e reconciliação por conjunto, com dez cenários de divergência), leitura das memórias de médias
+(avaliador de expressões, extração das contas, quadro de resultado, divisor, jornada e nove
+cenários de divergência), auditoria completa dos dois
 casos, o vínculo achado→rubrica que alimenta o
 destaque cruzado, o veredito, as unidades dos achados, o módulo de convenções (vigência,
 piso, aviso ampliado, data-base, multa, assistencial, homologação, estabilidade, cláusulas

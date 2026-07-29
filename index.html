@@ -571,15 +571,16 @@ function conteudoDe(o, bytesTodos, objs) {
   if (!o || !o.stream) return Promise.resolve('');
   var ini = o.stream[0], fim = o.stream[1];
   /* o intervalo até "endstream" inclui o EOL final e o inflate é estrito
-     com bytes sobrando: corta pelo /Length quando ele existir */
-  var mLen = /\/Length\s+(\d+)(?!\s+\d+\s+R)/.exec(o.dict), tam = null;
-  if (mLen) tam = +mLen[1];
-  else {
-    var rl = ref(o.dict, 'Length');
-    if (rl != null && objs && objs[rl]) {
-      var mv = /^\s*(\d+)/.exec(objs[rl].corpo);
-      if (mv) tam = +mv[1];
-    }
+     com bytes sobrando: corta pelo /Length quando ele existir.
+     A forma indireta ("/Length 13 0 R") vem primeiro de propósito — testar
+     a direta antes deixa o regex retroceder e casar só o "1" de "13". */
+  var tam = null, rl = ref(o.dict, 'Length');
+  if (rl != null && objs && objs[rl]) {
+    var mv = /^\s*(\d+)/.exec(objs[rl].corpo);
+    if (mv) tam = +mv[1];
+  } else {
+    var mLen = /\/Length\s+(\d+)/.exec(o.dict);
+    if (mLen) tam = +mLen[1];
   }
   if (tam != null && tam > 0 && ini + tam <= fim) fim = ini + tam;
   else while (fim > ini && (bytesTodos[fim - 1] === 10 || bytesTodos[fim - 1] === 13)) fim--;
@@ -925,6 +926,13 @@ function mo(v){                       // 1234.5 -> "1.234,50"
   return (v<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+s[1];
 }
 function r2(v){return Math.round(v*100)/100;}
+/* número com as casas que ele tiver (até 6) — para comparar contas da memória,
+   onde arredondar em 2 casas esconderia justamente a divergência */
+function preciso(v){
+  if(v==null||isNaN(v)) return '—';
+  var s=(Math.round(v*1e6)/1e6).toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
+  return s.replace('.',',');
+}
 function ok2(a,b,t){return Math.abs(r2(a)-r2(b))<=(t==null?0.02:t);}
 function plural(n,um,mu){return n+' '+(n===1?um:mu);}
 
@@ -1412,6 +1420,135 @@ function parseTrct(txt){
     }
   }
   return t;
+}
+
+/* ================= memória de cálculo de médias ========================
+   A memória imprime as próprias contas com os números. Dá para refazer
+   cada uma e conferir o resultado contra as rubricas do analítico. */
+
+/* avalia expressão aritmética em português: "886,16 / 12 * 7" */
+function avaliarExpr(expr){
+  var toks=String(expr).match(/[\d.]*\d(?:,\d+)?|[()+\-*\/]/g);
+  if(!toks||!toks.length) return null;
+  var saida=[], ops=[], prec={'+':1,'-':1,'*':2,'/':2};
+  function num(t){ return parseFloat(t.replace(/\./g,'').replace(',','.')); }
+  for(var i=0;i<toks.length;i++){
+    var t=toks[i];
+    if(/^[\d.]*\d(?:,\d+)?$/.test(t)){ saida.push(num(t)); continue; }
+    if(t==='('){ ops.push(t); continue; }
+    if(t===')'){
+      while(ops.length&&ops[ops.length-1]!=='(') if(!aplicar()) return null;
+      if(!ops.length) return null;
+      ops.pop(); continue;
+    }
+    if(prec[t]){
+      while(ops.length&&prec[ops[ops.length-1]]>=prec[t]) if(!aplicar()) return null;
+      ops.push(t); continue;
+    }
+    return null;
+  }
+  while(ops.length){ if(ops[ops.length-1]==='(') return null; if(!aplicar()) return null; }
+  return saida.length===1?saida[0]:null;
+
+  function aplicar(){
+    var op=ops.pop(), b=saida.pop(), a=saida.pop();
+    if(a==null||b==null) return false;
+    if(op==='+') saida.push(a+b);
+    else if(op==='-') saida.push(a-b);
+    else if(op==='*') saida.push(a*b);
+    else if(op==='/'){ if(!b) return false; saida.push(a/b); }
+    else return false;
+    return true;
+  }
+}
+
+/* extrai a expressão que antecede o "=" numa linha da memória */
+function exprAntesDoIgual(linha){
+  var l=linha.replace(/\d{1,2}\/\d{4}/g,' ')          /* tira competências 01/2026 */
+             .replace(/\(\d{2,3}:\d{2}\)/g,' ');      /* tira durações (014:25) */
+  var ig=l.indexOf('=');
+  if(ig<0) return null;
+  var i=ig-1;
+  while(i>=0&&/[\d.,\s()*\/+\-]/.test(l.charAt(i))) i--;
+  var bruto=l.slice(i+1,ig).replace(/^[\s+\-*\/]+/,'').trim();
+  if(!/\d/.test(bruto)||!/[*\/+\-]/.test(bruto)) return null;
+  /* a varredura para a esquerda pode ter engolido um número solto que estava
+     antes da conta ("Total: 19,27  19,27 / 6"). Vai descartando pela esquerda
+     até sobrar algo que realmente avalia. */
+  var toks=bruto.match(/[\d.]*\d(?:,\d+)?|[()+\-*\/]/g)||[];
+  for(var k=0;k<toks.length;k++){
+    var cand=toks.slice(k).join(' ');
+    if(!/[*\/+\-]/.test(cand)) break;
+    if(avaliarExpr(cand)!=null) return cand;
+  }
+  return null;
+}
+
+function parseMedias(txt){
+  if(!txt||!/MEM[ÓO]RIA\s+DE\s+C[ÁA]LCULO\s+DE\s+M[ÉE]DIAS/i.test(txt)) return null;
+  var linhas=txt.replace(/\r/g,'').split('\n');
+  var m={rubricas:[],formulas:[],resultado:null,erros:[]};
+
+  function acha(re){ var x=re.exec(txt); return x?x[1]:null; }
+  m.cnpj=acha(/CNPJ:\s*([\d.\/-]{14,20})/);
+  var emp=(acha(/Empregado:\s*(.+)/)||'').trim();
+  var me=/^(\d+)\s*-\s*(.+)$/.exec(emp);
+  m.nome=me?me[2].trim():emp;
+  m.rotulo=(acha(/C[áa]lculo de m[ée]dia:\s*(.+)/)||'').trim();
+  var mAq=/Per[íi]odo aquisitivo:\s*(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/.exec(txt);
+  if(mAq){ m.aquisitivoIni=pd(mAq[1]); m.aquisitivoFim=pd(mAq[2]); }
+
+  var r=m.rotulo.toUpperCase();
+  if(/13/.test(r)) m.tipo='13';
+  else if(/AVISO/.test(r)) m.tipo='aviso';
+  else if(/F[ÉE]RIAS/.test(r)) m.tipo='ferias';
+  else m.tipo='?';
+
+  /* fórmulas: toda linha "expressão = número" */
+  var noResultado=false;
+  for(var i=0;i<linhas.length;i++){
+    var l=linhas[i];
+    if(/Resultado do c[áa]lculo/i.test(l)){ noResultado=true; m.resultado={}; continue; }
+    if(noResultado){
+      var mr=/^\s*(Sal[áa]rio|M[ée]dia de rubricas em horas|M[ée]dia de rubricas em valor|Vantagem|Total)\s*:\s*([\d.]*\d,\d+)\s+([\d.]*\d,\d+)\s*$/.exec(l);
+      if(mr){
+        var chave={'SALARIO':'salario','MEDIA DE RUBRICAS EM HORAS':'horas',
+                   'MEDIA DE RUBRICAS EM VALOR':'valor','VANTAGEM':'vantagem','TOTAL':'total'}[normalizar(mr[1])];
+        if(chave) m.resultado[chave]={base:nb(mr[2]), calc:nb(mr[3])};
+      }
+      continue;
+    }
+    var mRub=/Rubrica:\s*(\d+)\s+(.+?)\s*\((Horas|Valor|Percentual|Quantidade)\)/.exec(l);
+    if(mRub) m.rubricas.push({cod:mRub[1], nome:mRub[2].trim(), unidade:mRub[3]});
+
+    var mMeses=/Meses para m[ée]dia:\s*(\d{2})\/(\d{4})\s*-\s*(\d{2})\/(\d{4})/.exec(l);
+    if(mMeses&&m.rubricas.length){
+      var ult=m.rubricas[m.rubricas.length-1];
+      ult.mesesDe=mMeses[1]+'/'+mMeses[2]; ult.mesesAte=mMeses[3]+'/'+mMeses[4];
+      ult.qtdMeses=(+mMeses[4]-+mMeses[2])*12+(+mMeses[3]-+mMeses[1])+1;
+    }
+    var mPer=/Per[íi]odo para m[ée]dia:\s*(Ano Corrente|[ÚU]ltimos Meses|Per[íi]odo Aquisitivo)/i.exec(l);
+    if(mPer&&m.rubricas.length) m.rubricas[m.rubricas.length-1].periodo=mPer[1];
+
+    var expr=exprAntesDoIgual(l);
+    if(expr){
+      var mRes=/=\s*([\d.]*\d(?:,\d+)?)\s*$/.exec(l.replace(/\(\d{2,3}:\d{2}\)/g,''));
+      if(mRes){
+        var f={expr:expr, impresso:nb(mRes[1]), obtido:avaliarExpr(expr), linha:i+1};
+        if(f.obtido!=null){
+          m.formulas.push(f);
+          /* "Total / N = média": guarda o divisor da última rubrica */
+          var mDiv=/^([\d.]*\d(?:,\d+)?)\s*\/\s*(\d+)$/.exec(expr);
+          if(mDiv&&m.rubricas.length&&m.rubricas[m.rubricas.length-1].divisor==null)
+            m.rubricas[m.rubricas.length-1].divisor=+mDiv[2];
+          /* "base / qtde horas = valor hora" */
+          var mVh=/^([\d.]*\d(?:,\d+)?)\s*\/\s*([\d.]*\d(?:,\d+)?)$/.exec(expr);
+          if(mVh&&/Valor hora/i.test(linhas[i-1]||'')) m.horasMes=nb(mVh[2]);
+        }
+      }
+    }
+  }
+  return m;
 }
 
 /* de que grupo do analítico cada caixa do TRCT deve sair */
@@ -2385,6 +2522,145 @@ function auditar(d){
         null,null,'Campo 23 do TRCT','Confira se o mês anterior teve falta ou afastamento que justifique.');
   }
 
+  /* ---- M. memórias de cálculo de médias ---- */
+  G='Memórias de médias';
+  var meds=d.medias||[];
+  /* separa as rubricas de um grupo em salário-base, média de horas, média
+     de valor e vantagem — é assim que a memória fecha o resultado */
+  function componentes(lista){
+    var o={base:[],horas:[],valor:[],vantagem:[]};
+    for(var z=0;z<lista.length;z++){
+      var nu=lista[z].nome.toUpperCase();
+      if(/VANTAG/.test(nu)) o.vantagem.push(lista[z]);
+      else if(/M[EÉ]DIA\s*(HORAS|HR)/.test(nu)) o.horas.push(lista[z]);
+      else if(/M[EÉ]DIA\s*(VALOR|VL)/.test(nu)) o.valor.push(lista[z]);
+      else o.base.push(lista[z]);
+    }
+    return o;
+  }
+  function grupoDaMemoria(me){
+    if(me.tipo==='13')    return {lista:C.d13, rot:'13º proporcional'};
+    if(me.tipo==='aviso') return {lista:C.avisoTodos, rot:'aviso prévio'};
+    if(me.tipo==='ferias'){
+      var venc=me.aquisitivoFim&&d.demissao&&difDias(me.aquisitivoFim,d.demissao)>15;
+      return venc?{lista:C.feriasVenc, rot:'férias vencidas'}:{lista:C.feriasProp, rot:'férias proporcionais'};
+    }
+    return null;
+  }
+
+  if(!meds.length){
+    var precisaMedia=(function(){
+      var alvos=[C.d13,C.feriasProp,C.feriasVenc,C.avisoTodos];
+      for(var z=0;z<alvos.length;z++)
+        for(var y=0;y<alvos[z].length;y++)
+          if(/M[EÉ]DIA|VANTAG/.test(alvos[z][y].nome.toUpperCase())) return true;
+      return false;
+    })();
+    if(precisaMedia)
+      add('alerta',G,'Memórias de médias não conferidas',
+        'O cálculo integra médias de variáveis, e a memória que mostra como cada média foi apurada não foi lida.',
+        null,null,'Súmulas 45, 60, 172 e 347 TST','Solte também os PDFs de "Cálculo de Médias" junto com o analítico.');
+  } else {
+    var vistos={};
+    for(var im=0;im<meds.length;im++){
+      var me=meds[im], gr=grupoDaMemoria(me);
+      var rotM=me.rotulo||me.tipo;
+
+      if(me.nome&&d.nome&&normalizar(me.nome)!==normalizar(d.nome)){
+        add('erro',G,'Memória de '+rotM+' é de outro empregado',
+          'Analítico: '+esc(d.nome)+'. Memória: '+esc(me.nome)+'.',null,null,'Conferência documental','');
+        continue;
+      }
+
+      /* a memória refaz as próprias contas: confere cada uma */
+      var ruins=[];
+      for(var q=0;q<me.formulas.length;q++){
+        var fo=me.formulas[q];
+        var tol=Math.max(0.005,Math.abs(fo.impresso)*1e-5);
+        if(Math.abs(fo.obtido-fo.impresso)>tol) ruins.push(fo);
+      }
+      if(ruins.length)
+        add('alerta',G,'Memória de '+rotM+': '+plural(ruins.length,'conta impressa não confere','contas impressas não conferem'),
+          ruins.slice(0,3).map(function(x){
+            /* aqui a precisão importa: com 2 casas a divergência some */
+            return '"'+x.expr+' = '+preciso(x.impresso)+'" dá '+preciso(x.obtido);
+          }).join(' · ')+(ruins.length>3?' …':''),
+          null,null,'Conferência aritmética da própria memória',
+          'Se o resultado final bate com o analítico, o erro está na linha impressa, não no dinheiro. Confira mesmo assim antes de entregar a memória ao empregado.');
+      else if(me.formulas.length)
+        add('ok',G,'Memória de '+rotM+': '+plural(me.formulas.length,'conta confere','contas conferem'),
+          'Refiz cada conta impressa na memória.',null,null,'Conferência aritmética');
+
+      if(!me.resultado||!me.resultado.total){
+        add('alerta',G,'Memória de '+rotM+' sem bloco de resultado',
+          'Não achei o quadro "Resultado do cálculo", então não deu para cruzar com as rubricas.',
+          null,null,'Conferência documental','');
+        continue;
+      }
+
+      /* o quadro tem de fechar consigo mesmo */
+      var somaComp=0;
+      ['salario','horas','valor','vantagem'].forEach(function(k){ if(me.resultado[k]) somaComp+=me.resultado[k].calc; });
+      cmp('erro',G,'Memória de '+rotM+': componentes × total',me.resultado.total.calc,r2(somaComp),
+        'Salário, médias e vantagem somam '+mo(somaComp)+' e o quadro declara '+mo(me.resultado.total.calc)+'.',
+        'Conferência aritmética da própria memória','',0.05);
+
+      if(!gr||!gr.lista.length){
+        add('alerta',G,'Memória de '+rotM+' sem grupo correspondente no analítico',
+          'A memória apura '+mo(me.resultado.total.calc)+' e não achei as rubricas equivalentes no cálculo.',
+          null,null,'Conferência documental','');
+        continue;
+      }
+      vistos[me.tipo+(gr.rot.indexOf('vencidas')>=0?'V':'')]=1;
+
+      cmp('erro',G,'Memória de '+rotM+' × '+gr.rot,me.resultado.total.calc,soma(gr.lista),
+        'A memória apura '+mo(me.resultado.total.calc)+' e o analítico lança '+mo(soma(gr.lista))+
+        ' em '+plural(gr.lista.length,'rubrica','rubricas')+'.',
+        'Súmulas 45, 60, 172 e 347 TST — as médias integram a verba.','',0.05);
+      rr(cods(gr.lista));
+
+      /* componente a componente */
+      var comp=componentes(gr.lista);
+      [['salario','base','Salário'],['horas','horas','Média de horas'],
+       ['valor','valor','Média de valor'],['vantagem','vantagem','Vantagem']].forEach(function(par){
+        var doc=me.resultado[par[0]], lista=comp[par[1]];
+        if(!doc||!lista.length) return;
+        if(doc.calc===0&&!lista.length) return;
+        cmp('erro',G,'Memória de '+rotM+' — '+par[2],doc.calc,soma(lista),
+          'Memória: '+mo(doc.calc)+'. Analítico: '+mo(soma(lista))+'.',
+          'Conferência documental','',0.05);
+        rr(cods(lista));
+      });
+
+      /* divisor da média e jornada usada no valor-hora */
+      for(q=0;q<me.rubricas.length;q++){
+        var rbm=me.rubricas[q];
+        if(rbm.divisor!=null&&rbm.qtdMeses!=null&&rbm.divisor!==rbm.qtdMeses)
+          add('alerta',G,'Memória de '+rotM+': divisor da rubrica '+rbm.cod,
+            'A média dividiu por '+rbm.divisor+' e o período declarado ('+rbm.mesesDe+' a '+rbm.mesesAte+') tem '+rbm.qtdMeses+' meses.',
+            rbm.divisor,rbm.qtdMeses,'Súmula 347 TST — a média considera os meses do período de apuração.',
+            'Divisor errado muda a média e todas as verbas que ela alimenta.',0.5);
+      }
+      if(me.horasMes&&CFG.horasMes&&Math.abs(me.horasMes-CFG.horasMes)>0.5)
+        add('alerta',G,'Memória de '+rotM+': jornada do valor-hora',
+          'A memória dividiu por '+mo(me.horasMes)+' horas e o parâmetro configurado é '+mo(CFG.horasMes)+'.',
+          me.horasMes,CFG.horasMes,'Art. 64 CLT','Confira a jornada contratada em Tabelas & regras.',0.5);
+    }
+
+    /* faltou memória de algum grupo que tem média lançada */
+    [['13',C.d13,'13º proporcional'],['aviso',C.avisoTodos,'aviso prévio'],
+     ['ferias',C.feriasProp,'férias proporcionais'],['feriasV',C.feriasVenc,'férias vencidas']
+    ].forEach(function(x){
+      if(vistos[x[0]]||!x[1].length) return;
+      var temMedia=false;
+      for(var z=0;z<x[1].length;z++) if(/M[EÉ]DIA|VANTAG/.test(x[1][z].nome.toUpperCase())) temMedia=true;
+      if(temMedia)
+        add('alerta',G,'Sem memória de médias de '+x[2],
+          'O analítico integra médias nessa verba ('+mo(soma(x[1]))+') e a memória correspondente não foi lida.',
+          null,null,'Súmulas 45, 60, 172 e 347 TST','Solte também esse PDF de "Cálculo de Médias".');
+    });
+  }
+
   /* ---- G. fechamento ---- */
   G='Fechamento';
   var somaP=0,somaD=0;
@@ -2713,6 +2989,25 @@ function renderCalculo(d,res){
        kv('Remuneração mês ant. (23)',tr.remuneracaoAnterior!=null?mo(tr.remuneracaoAnterior):'—',1)+
        kv('Empregado (11)',tr.nome||'—')+
        '</div></div></div>';
+  }
+
+  /* memórias de médias */
+  if(d.medias&&d.medias.length){
+    h+='<div class="card"><h3>Memórias de médias · '+d.medias.length+'</h3>'+
+       '<table><thead><tr><th>Memória</th><th class="n">Contas</th><th class="n">Apurado</th></tr></thead><tbody>';
+    for(var im=0;im<d.medias.length;im++){
+      var me=d.medias[im], ruins=0;
+      for(var q=0;q<me.formulas.length;q++){
+        var fo=me.formulas[q];
+        if(Math.abs(fo.obtido-fo.impresso)>Math.max(0.005,Math.abs(fo.impresso)*1e-5)) ruins++;
+      }
+      h+='<tr><td class="nm">'+esc(me.rotulo||me.tipo)+
+         (me.aquisitivoIni?'<br><span class="cod">'+fd(me.aquisitivoIni)+' a '+fd(me.aquisitivoFim)+'</span>':'')+'</td>'+
+         '<td class="n"'+(ruins?' style="color:var(--alerta-tx)"':'')+'>'+
+           (ruins?ruins+' de '+me.formulas.length+' ✗':me.formulas.length+' ✓')+'</td>'+
+         '<td class="n">'+(me.resultado&&me.resultado.total?mo(me.resultado.total.calc):'—')+'</td></tr>';
+    }
+    h+='</tbody></table></div>';
   }
 
   /* bases */
@@ -3543,6 +3838,51 @@ var EXTRCT=[
 'VALOR LÍQUIDO R$ 10.642,54'
 ].join('\n');
 
+/* memória de médias do 13º do mesmo caso do EX1 */
+var EXMED=[
+'Empresa: PAISAGISMO EXEMPLO LTDA Página: 1 / 2',
+'CNPJ: 11.111.111/0001-11 Emissão: 29/07/2026',
+'MEMÓRIA DE CÁLCULO DE MÉDIAS',
+'Empregado: 292 - FULANO DE TAL',
+'Cálculo de média: 13º Salário - Rescisão',
+'Rubrica: 301 ACUMULO DE FUNÇÃO (Percentual)',
+'Configuração de Média: Movimento do período:',
+'Unidade: Quantidade Cálculo:',
+'Período para média: Ano Corrente (<Salário mês> * ( <Média rubrica> / 100 )) = <Valor vantagem>',
+'Meses: 0 (2215,40 * ( 40,00 / 100 )) = 886,16',
+'Valores a considerar: Todos',
+'Meses: 0 <Valor média> / <Meses ano> * <N°. meses> = <Valor média competência>',
+'Meses para média: 01/2026 - 06/2026 886,16 / 12 * 7 = 516,926667',
+'Rubrica: 256 HORAS EXTRAS 50% (Horas)',
+'Configuração de Média: Movimento do período:',
+'Unidade: Quantidade 01/2026 14,42 (014:25)',
+'Período para média: Ano Corrente 02/2026 0,77 (000:46)',
+'Meses: 0 03/2026 4,08 (004:05)',
+'Valores a considerar: Todos Total: 19,27 (019:16)',
+'Meses: 0 <Total rubrica período> / <Nº. meses> = <Média hora>',
+'Meses para média: 01/2026 - 06/2026 19,27 / 6 = 3,211667',
+'Cálculo:',
+'<Base hora extra> / <Qtde horas mês> = <Valor hora>',
+'3101,56 / 220,00 = 14,098',
+'<Valor hora> * <Média hora> * (<Taxa rubrica>/100) = <Valor média>',
+'14,098 * 3,211667 * ( 150,00 / 100 ) = 67,917122',
+'<Valor média> / <Meses ano> * <N°. meses> = <Valor média competência>',
+'67,917122 / 12 * 7 = 39,618321',
+'Rubrica: 295 HORA EXTRA INTRAJORNADA 50% (Horas)',
+'Meses para média: 01/2026 - 06/2026 7,86 / 6 = 1,31',
+'14,098 * 1,31 * ( 150,00 / 100 ) = 27,70257',
+'27,70257 / 12 * 7 = 16,159833',
+'Rubrica: 250 REFLEXO EXTRAS DSR (Valor)',
+'Meses para média: 01/2026 - 06/2026 110,23 / 6 = 18,371667',
+'18,371667 / 12 * 7 = 10,716806',
+'Resultado do cálculo Base de cálculo Valor calculado',
+'Salário: 2.215,40 1.292,32',
+'Média de rubricas em horas: 95,62 55,78',
+'Média de rubricas em valor: 18,37 10,72',
+'Vantagem: 886,16 516,93',
+'Total: 3.215,55 1.875,75'
+].join('\n');
+
 /* --------------------------------- boot --------------------------------- */
 function msg(cls,txt){$('#msg1').innerHTML='<div class="msg '+cls+'">'+txt+'</div>';}
 
@@ -3552,6 +3892,7 @@ function processar(){
   d.cctId=cctSugerida(d);
   d.fatos=fatosPadrao();
   d.trct=TRCT_PENDENTE; TRCT_PENDENTE=null;
+  d.medias=MEDIAS_PENDENTES; MEDIAS_PENDENTES=[];
   ABERTOS={};
   renderTudo(d);
   window.scrollTo({top:0,behavior:'auto'});
@@ -3646,7 +3987,7 @@ function ligarUI(){
 }
 
 /* --------------------------- abrir arquivos ----------------------------- */
-var TRCT_PENDENTE=null;   /* TRCT lido junto com o analítico, anexado no processar() */
+var TRCT_PENDENTE=null, MEDIAS_PENDENTES=[];   /* lidos junto com o analítico, anexados no processar() */
 function mostrarTexto(){ $('#areaTexto').hidden=false; }
 
 /* pontuação: o quanto o texto parece um relatório analítico de rescisão */
@@ -3663,11 +4004,24 @@ function pontuarRelatorio(txt){
   var rubricas=(txt.match(/^\s*\d{1,6}\s+[A-Za-zÀ-ÿ].*\d[\d.,]*\s*$/gm)||[]).length;
   return p+Math.min(rubricas,40);
 }
+/* o quanto o texto parece uma memória de cálculo de médias */
+function pontuarMedias(txt){
+  if(!txt) return -1;
+  var t=txt.toUpperCase(), p=0;
+  if(!/MEM[ÓO]RIA\s+DE\s+C[ÁA]LCULO\s+DE\s+M[ÉE]DIAS/.test(t)) return -1;
+  p+=60;
+  if(/C[ÁA]LCULO\s+DE\s+M[ÉE]DIA:/.test(t)) p+=15;
+  if(/RESULTADO\s+DO\s+C[ÁA]LCULO/.test(t)) p+=15;
+  if(/RELAT[ÓO]RIO\s+ANAL[ÍI]TICO/.test(t)) p-=60;
+  if(/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/.test(t)) p-=60;
+  return p;
+}
 /* o quanto o texto parece um Termo de Rescisão (TRCT) */
 function pontuarTrct(txt){
   if(!txt) return -1;
   var t=txt.toUpperCase(), p=0;
-  if(/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/.test(t)) p+=60;
+  if(!/TERMO\s+DE\s+RESCIS[ÃA]O\s+DO\s+CONTRATO/.test(t)) return -1;
+  p+=60;
   if(/DISCRIMINA[ÇC][ÃA]O\s+DAS\s+VERBAS/.test(t)) p+=20;
   if(/TOTAL\s+BRUTO/.test(t)) p+=10;
   if(/VALOR\s+L[ÍI]QUIDO/.test(t)) p+=10;
@@ -3686,13 +4040,16 @@ function abrirArquivos(lista){
 
   Promise.all(arquivos.map(function(f){
     return lerArquivo(f).then(function(txt){
-        return {nome:f.name, txt:txt, pontos:pontuarRelatorio(txt), pontosTrct:pontuarTrct(txt)}; },
+        return {nome:f.name, txt:txt, pontos:pontuarRelatorio(txt),
+                pontosTrct:pontuarTrct(txt), pontosMed:pontuarMedias(txt)}; },
       function(e){ return {nome:f.name, erro:e&&e.message||'falha'}; });
   })).then(function(res){
     var bons=res.filter(function(r){return r.txt&&r.pontos>0;});
     bons.sort(function(a,b){return b.pontos-a.pontos;});
     var trcts=res.filter(function(r){return r.txt&&r.pontosTrct>0;});
     trcts.sort(function(a,b){return b.pontosTrct-a.pontosTrct;});
+    /* memórias entram todas: uma por verba (13º, férias, aviso) */
+    var medias=res.filter(function(r){return r.txt&&r.pontosMed>0;});
     if(!bons.length){
       var motivos={'pdf-protegido':'o PDF está protegido por senha',
                    'sem-camada-de-texto':'o PDF é uma imagem digitalizada, sem texto',
@@ -3712,14 +4069,22 @@ function abrirArquivos(lista){
     }
     $('#txt').value=bons[0].txt;
     TRCT_PENDENTE=trcts.length?parseTrct(trcts[0].txt):null;
-    var temTrct=!!TRCT_PENDENTE;          /* processar() consome a variável */
+    MEDIAS_PENDENTES=[];
+    for(var im=0;im<medias.length;im++){
+      var pm=parseMedias(medias[im].txt);
+      if(pm) MEDIAS_PENDENTES.push(pm);
+    }
+    var temTrct=!!TRCT_PENDENTE, nMed=MEDIAS_PENDENTES.length;   /* processar() consome */
     var d=processar();
     if(d){
-      var usados=1+(temTrct?1:0);
+      var usados=1+(temTrct?1:0)+nMed;
+      var partes=['Li <b>'+esc(bons[0].nome)+'</b>'];
+      partes.push(temTrct?'conferi contra <b>'+esc(trcts[0].nome)+'</b>'
+                         :'<b>sem o TRCT</b>, que fica sem conferência');
+      partes.push(nMed?'e refiz '+plural(nMed,'memória de médias','memórias de médias')
+                      :'e <b>sem as memórias de médias</b>');
       var extra=res.length>usados?' Ignorei '+plural(res.length-usados,'outro arquivo','outros arquivos')+'.':'';
-      msg('ok','Li <b>'+esc(bons[0].nome)+'</b>'+
-        (temTrct?' e conferi contra <b>'+esc(trcts[0].nome)+'</b>':
-          ' — <b>sem o TRCT</b>, que fica sem conferência')+'.'+extra);
+      msg('ok',partes.join(', ')+'.'+extra);
     }
   });
 }
@@ -3909,10 +4274,11 @@ function autoteste(){
   /* --- contagem e veredito --- */
   var cg1=contagem(F1), cg2=contagem(F2);
   T('V1 caso correto sem erro',cg1.erro===0,cg1.erro);
-  T('V1 alertas são só os pedidos de informação',cg1.alerta===3
+  T('V1 alertas são só os pedidos de informação',cg1.alerta===4
       &&acha(F1,/Nenhuma conven[çc][ãa]o coletiva aplicada/)!=null
       &&acha(F1,/Nenhum fato do contrato informado/)!=null
-      &&acha(F1,/TRCT não conferido/)!=null,
+      &&acha(F1,/TRCT não conferido/)!=null
+      &&acha(F1,/Memórias de médias não conferidas/)!=null,
     (function(){var s=[];for(var i=0;i<F1.length;i++)if(F1[i].sev==='alerta')s.push(F1[i].titulo);return s.join(' | ');})());
   T('V1 impacto zero no caso correto',ok2(cg1.impacto,0),cg1.impacto);
   T('V2 impacto = 53,77',ok2(cg2.impacto,53.77,0.02),cg2.impacto);
@@ -4146,6 +4512,104 @@ function autoteste(){
   T('TR pontua o termo acima do analítico',pontuarTrct(EXTRCT)>50&&pontuarTrct(EX1)<0);
   T('TR analítico não é confundido com termo',pontuarRelatorio(EXTRCT)<0);
   T('TR normalizar tira acento e pontuação',normalizar('Férias Proporc. 11/12')==='FERIAS PROPORC 11 12',normalizar('Férias Proporc. 11/12'));
+
+  /* --- memórias de médias --- */
+  T('ME avalia expressão simples',avaliarExpr('19,27 / 6')===19.27/6);
+  T('ME respeita precedência',avaliarExpr('2 + 3 * 4')===14);
+  T('ME respeita parênteses',avaliarExpr('( 2 + 3 ) * 4')===20);
+  T('ME lê milhar e decimal em português',ok2(avaliarExpr('3.101,56 / 220,00'),14.098,0.001),avaliarExpr('3.101,56 / 220,00'));
+  T('ME encadeia divisão e multiplicação',ok2(avaliarExpr('886,16 / 12 * 7'),516.926667,0.0001));
+  T('ME parênteses aninhados',ok2(avaliarExpr('(2215,40 * ( 40,00 / 100 ))'),886.16,0.01));
+  T('ME divisão por zero devolve nulo',avaliarExpr('5 / 0')===null);
+  T('ME expressão inválida devolve nulo',avaliarExpr('abc')===null&&avaliarExpr('( 2 + 3')===null);
+
+  T('ME extrai expressão ignorando competências',
+    exprAntesDoIgual('Meses para média: 01/2026 - 06/2026 886,16 / 12 * 7 = 516,926667')==='886,16 / 12 * 7',
+    exprAntesDoIgual('Meses para média: 01/2026 - 06/2026 886,16 / 12 * 7 = 516,926667'));
+  T('ME extrai expressão ignorando duração em horas',
+    exprAntesDoIgual('Valores a considerar: Todos Total: 19,27 (019:16) 19,27 / 6 = 3,211667')==='19,27 / 6',
+    exprAntesDoIgual('Valores a considerar: Todos Total: 19,27 (019:16) 19,27 / 6 = 3,211667'));
+  T('ME ignora linha com marcadores',exprAntesDoIgual('<Total rubrica período> / <Nº. meses> = <Média hora>')===null);
+  T('ME ignora linha sem operador',exprAntesDoIgual('Total da rubrica férias = 37,94')===null);
+
+  var ME=parseMedias(EXMED);
+  T('ME reconhece a memória',ME!=null);
+  T('ME ignora quem não é memória',parseMedias(EX1)===null&&parseMedias(EXTRCT)===null);
+  T('ME identifica o tipo',ME.tipo==='13',ME.tipo);
+  T('ME empregado e CNPJ',ME.nome==='FULANO DE TAL'&&ME.cnpj==='11.111.111/0001-11');
+  T('ME leu as 4 rubricas',ME.rubricas.length===4,ME.rubricas.map(function(r){return r.cod;}).join(','));
+  T('ME leu a unidade de cada rubrica',ME.rubricas[0].unidade==='Percentual'&&ME.rubricas[1].unidade==='Horas');
+  T('ME leu o divisor da média',ME.rubricas[1].divisor===6,ME.rubricas[1].divisor);
+  T('ME contou os meses do período',ME.rubricas[1].qtdMeses===6,ME.rubricas[1].qtdMeses);
+  T('ME leu a jornada do valor-hora',ME.horasMes===220,ME.horasMes);
+  T('ME coletou as fórmulas',ME.formulas.length===11,ME.formulas.length);
+  T('ME todas as contas impressas conferem',(function(){
+    for(var i=0;i<ME.formulas.length;i++){
+      var f=ME.formulas[i];
+      if(Math.abs(f.obtido-f.impresso)>Math.max(0.005,Math.abs(f.impresso)*1e-5)) return false;
+    } return true;})(),
+    ME.formulas.filter(function(f){return Math.abs(f.obtido-f.impresso)>0.005;}).map(function(f){return f.expr;}).join(' | '));
+  T('ME leu o quadro de resultado',ME.resultado&&ME.resultado.total.calc===1875.75&&ME.resultado.salario.calc===1292.32);
+  T('ME quadro fecha consigo mesmo',(function(){
+    var s=ME.resultado.salario.calc+ME.resultado.horas.calc+ME.resultado.valor.calc+ME.resultado.vantagem.calc;
+    return ok2(s,ME.resultado.total.calc,0.02);})());
+
+  function comMedias(mudar,tipoBase){
+    var x=clone(d1);
+    var m=parseMedias(EXMED);
+    if(tipoBase) m.tipo=tipoBase;
+    if(mudar) mudar(m);
+    x.medias=[m];
+    return auditar(x).findings.filter(function(f){return f.grupo==='Memórias de médias';});
+  }
+  var Fm2=comMedias(null);
+  T('ME conferência sem erro no caso correto',
+    Fm2.filter(function(f){return f.sev==='erro';}).length===0,
+    Fm2.filter(function(f){return f.sev==='erro';}).map(function(f){return f.titulo;}).join(' | '));
+  T('ME confirma que as contas conferem',achaSev(Fm2,/contas conferem/,'ok')!=null);
+  T('ME cruza o total com o grupo do analítico',achaSev(Fm2,/× 13º proporcional/,'ok')!=null);
+  T('ME cruza componente a componente',
+    achaSev(Fm2,/— Salário/,'ok')!=null&&achaSev(Fm2,/— Média de horas/,'ok')!=null&&
+    achaSev(Fm2,/— Média de valor/,'ok')!=null&&achaSev(Fm2,/— Vantagem/,'ok')!=null);
+
+  T('ME acusa conta impressa que não confere',
+    achaSev(comMedias(function(m){m.formulas[0].impresso=999;}),/conta impressa não confere/,'alerta')!=null);
+  T('ME acusa quadro que não fecha',
+    achaSev(comMedias(function(m){m.resultado.total.calc=2000;}),/componentes × total/,'erro')!=null);
+  T('ME acusa média divergente do analítico',
+    achaSev(comMedias(function(m){m.resultado.horas.calc=99;m.resultado.total.calc=1875.75-55.78+99;}),
+      /— Média de horas/,'erro')!=null);
+  T('ME acusa memória de outro empregado',
+    achaSev(comMedias(function(m){m.nome='OUTRA PESSOA';}),/de outro empregado/,'erro')!=null);
+  T('ME acusa divisor diferente do período',
+    achaSev(comMedias(function(m){m.rubricas[1].divisor=12;}),/divisor da rubrica/,'alerta')!=null);
+  T('ME acusa jornada diferente da configurada',
+    achaSev(comMedias(function(m){m.horasMes=200;}),/jornada do valor-hora/,'alerta')!=null);
+  T('ME avisa quando falta o quadro de resultado',
+    achaSev(comMedias(function(m){m.resultado=null;}),/sem bloco de resultado/,'alerta')!=null);
+  T('ME avisa quando não há grupo correspondente',
+    achaSev(comMedias(function(m){m.tipo='aviso';}),/sem grupo correspondente|× aviso/,'alerta')!=null||
+    achaSev(comMedias(function(m){m.tipo='aviso';}),/× aviso pr[ée]vio/,'erro')!=null);
+  T('ME avisa quando nenhuma memória foi lida',
+    achaSev(auditar(clone(d1)).findings,/Memórias de médias não conferidas/,'alerta')!=null);
+  T('ME cobra a memória que faltou',
+    achaSev(comMedias(null),/Sem memória de médias de férias proporcionais/,'alerta')!=null);
+  T('ME distingue férias vencidas por período aquisitivo',(function(){
+    var x=clone(d2), m=parseMedias(EXMED);
+    m.tipo='ferias'; m.nome=d2.nome;
+    m.aquisitivoIni=pd('02/12/2024'); m.aquisitivoFim=pd('01/12/2025');
+    m.resultado={salario:{base:2500,calc:2500},horas:{base:516.16,calc:516.16},
+                 valor:{base:89.12,calc:89.12},vantagem:{base:0,calc:0},total:{base:3105.28,calc:3105.28}};
+    x.medias=[m];
+    return achaSev(auditar(x).findings,/× férias vencidas/,'ok')!=null;})());
+
+  T('ME mostra a divergência com casas suficientes',preciso(15.246414)==='15,246414'&&preciso(15.236414)==='15,236414',
+    preciso(15.246414)+' / '+preciso(15.236414));
+  T('ME preciso remove zeros à direita',preciso(14.098)==='14,098'&&preciso(30)==='30');
+  T('ME pontua a memória acima dos outros documentos',
+    pontuarMedias(EXMED)>50&&pontuarMedias(EX1)<0&&pontuarMedias(EXTRCT)<0);
+  T('ME memória não é confundida com analítico nem com termo',
+    pontuarRelatorio(EXMED)<0&&pontuarTrct(EXMED)<0);
 
   /* --- fatos do contrato: estabilidades, tipo de contrato, procedimento --- */
   function comFatos(dados,mot){
@@ -4386,7 +4850,7 @@ function autoteste(){
     pis:['111.11111.11-1']
   };
   function soPermitidos(re,ok,g){
-    var achados=(EX1+EX2+EXTRCT).match(re)||[];
+    var achados=(EX1+EX2+EXTRCT+EXMED).match(re)||[];
     if(!achados.length) return false;
     for(var i=0;i<achados.length;i++){
       var v=achados[i].replace(g,'').trim();
@@ -4399,11 +4863,11 @@ function autoteste(){
   T('X exemplo 2 fictício',d2.nome===FICT.nomes[1]&&d2.cnpj===FICT.cnpjs[1]&&d2.empresa===FICT.empresas[1],
     d2.nome+' / '+d2.cnpj+' / '+d2.empresa);
   T('X só CNPJ fictício nos fixtures',soPermitidos(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g,FICT.cnpjs,/^$/),
-    ((EX1+EX2+EXTRCT).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT+EXMED).match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g)||[]).join(' '));
   T('X só CTPS fictício nos fixtures',soPermitidos(/CTPS:\s*\d+/g,FICT.ctps,/CTPS:\s*/),
-    ((EX1+EX2+EXTRCT).match(/CTPS:\s*\d+/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT+EXMED).match(/CTPS:\s*\d+/g)||[]).join(' '));
   T('X só PIS fictício nos fixtures',soPermitidos(/PIS:\s*[\d.-]+/g,FICT.pis,/PIS:\s*/),
-    ((EX1+EX2+EXTRCT).match(/PIS:\s*[\d.-]+/g)||[]).join(' '));
+    ((EX1+EX2+EXTRCT+EXMED).match(/PIS:\s*[\d.-]+/g)||[]).join(' '));
   T('X nome do empregado é da lista fictícia',
     FICT.nomes.indexOf(d1.nome)>=0&&FICT.nomes.indexOf(d2.nome)>=0);
   T('X TRCT de exemplo também é fictício',
@@ -4451,9 +4915,10 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 /* exporta para o runner em Node */
 if(typeof module!=='undefined'&&module.exports){
   module.exports={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,
-    auditar:auditar,EX1:EX1,EX2:EX2};
+    parseMedias:parseMedias,avaliarExpr:avaliarExpr,auditar:auditar,EX1:EX1,EX2:EX2};
 }
-window.MXRESC={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,auditar:auditar,
+window.MXRESC={autoteste:autoteste,parseAnalitico:parseAnalitico,parseTrct:parseTrct,
+  parseMedias:parseMedias,avaliarExpr:avaliarExpr,auditar:auditar,
   EX1:EX1,EX2:EX2,calcInss:calcInss,avos13:avos13,avosFerias:avosFerias};
 })();
 </script>
