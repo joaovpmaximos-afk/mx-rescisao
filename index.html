@@ -311,7 +311,9 @@ input:focus,select:focus{outline:none;border-color:var(--brand)}
 .form .full{grid-column:1/-1}
 
 /* ===== drawer de tabelas ======================================= */
-.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80;backdrop-filter:blur(2px)}
+/* sem backdrop-filter: o desfoque forçava o corpo do painel (camada de rolagem)
+   a não compor em algumas GPUs no Windows, deixando o painel em branco */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:80}
 .drawer{
   position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100%;z-index:90;
   background:var(--sf);border-left:1px solid var(--line);box-shadow:var(--sh);
@@ -4208,7 +4210,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-07-30b';
+var BUILD='2026-07-30c';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
