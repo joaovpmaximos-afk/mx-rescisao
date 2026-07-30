@@ -1005,14 +1005,24 @@ var CFG_PADRAO={
 };
 var CFG=carregarCfg();
 
+/* uma config só é usável se as tabelas forem listas não-vazias de faixas com
+   número; qualquer coisa fora disso volta pro padrão em vez de estourar depois */
+function faixasOk(v){
+  if(!Array.isArray(v)||!v.length) return false;
+  for(var i=0;i<v.length;i++) if(!v[i]||typeof v[i].aliq!=='number'||typeof v[i].ate!=='number') return false;
+  return true;
+}
+function cfgUsavel(o){
+  return o&&typeof o==='object'&&faixasOk(o.inss)&&faixasOk(o.irrf);
+}
 function carregarCfg(){
   try{
     var s=localStorage.getItem('mxresc_cfg');
     if(s){
       var o=JSON.parse(s);
-      /* versão salva diferente da atual = tabela desatualizada: começa do
-         padrão novo em vez de manter os números velhos */
-      if(o.tabelaVersao!==CFG_PADRAO.tabelaVersao) return JSON.parse(JSON.stringify(CFG_PADRAO));
+      /* versão antiga OU config corrompida = começa do padrão novo */
+      if(o.tabelaVersao!==CFG_PADRAO.tabelaVersao||!cfgUsavel(o))
+        return JSON.parse(JSON.stringify(CFG_PADRAO));
       for(var k in CFG_PADRAO) if(!(k in o)) o[k]=CFG_PADRAO[k];
       return o;
     }
@@ -3374,10 +3384,24 @@ function abrirDrawer(modo){
 function abrirConvencoes(){ EDITANDO=null; abrirDrawer('convencoes'); }
 function pintarDrawer(){
   var t=$('#drawerTitulo');
-  if(MODO==='tabelas'){ t.textContent='Tabelas & regras'; $('#drawerBody').innerHTML=htmlTabelas(); ligarDrawer(); }
-  else if(MODO==='convencoes'){ t.textContent='Convenções coletivas'; $('#drawerBody').innerHTML=htmlListaCct(); ligarListaCct(); }
-  else if(MODO==='leis'){ t.textContent='Legislação & limites'; $('#drawerBody').innerHTML=htmlLeis(); }
-  else { t.textContent=EDITANDO&&EDITANDO.nome?EDITANDO.nome:'Nova convenção'; $('#drawerBody').innerHTML=htmlEditorCct(); ligarEditorCct(); }
+  /* qualquer erro ao montar um painel mostra a causa em vez de abrir vazio */
+  try{
+    if(MODO==='tabelas'){ t.textContent='Tabelas & regras'; $('#drawerBody').innerHTML=htmlTabelas(); ligarDrawer(); }
+    else if(MODO==='convencoes'){ t.textContent='Convenções coletivas'; $('#drawerBody').innerHTML=htmlListaCct(); ligarListaCct(); }
+    else if(MODO==='leis'){ t.textContent='Legislação & limites'; $('#drawerBody').innerHTML=htmlLeis(); }
+    else { t.textContent=EDITANDO&&EDITANDO.nome?EDITANDO.nome:'Nova convenção'; $('#drawerBody').innerHTML=htmlEditorCct(); ligarEditorCct(); }
+  }catch(e){
+    $('#drawerBody').innerHTML='<div class="msg err">Não consegui montar este painel.<br><b>'+
+      esc((e&&e.message)||e)+'</b><br><br>Isso costuma ser configuração salva corrompida. '+
+      'Clique abaixo para restaurar o padrão.</div>'+
+      '<div class="row" style="margin-top:12px"><button class="btn primary" id="bZerarCfg">Restaurar padrão e recarregar</button></div>';
+    var z=$('#bZerarCfg'); if(z) z.onclick=function(){
+      try{ localStorage.removeItem('mxresc_cfg'); }catch(_){}
+      CFG=JSON.parse(JSON.stringify(CFG_PADRAO));
+      pintarDrawer();
+    };
+    if(window.console) console.error('pintarDrawer('+MODO+'):', e);
+  }
   $('#drawerBody').scrollTop=0;
 }
 function fecharDrawer(){
@@ -4184,7 +4208,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-07-30';
+var BUILD='2026-07-30b';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
@@ -4459,6 +4483,24 @@ function autoteste(){
     var c=carregarCfg();
     if(bkp!=null) localStorage.setItem('mxresc_cfg',bkp); else localStorage.removeItem('mxresc_cfg');
     return c.inss[0].ate===1621.00&&c.tabelaVersao==='2026.1';})());
+  /* auto-correção: config corrompida não pode derrubar o painel */
+  T('faixasOk aceita tabela válida',faixasOk([{ate:1621,aliq:7.5}]));
+  T('faixasOk rejeita não-array',!faixasOk(null)&&!faixasOk({})&&!faixasOk([]));
+  T('faixasOk rejeita faixa sem número',!faixasOk([{ate:1621}])&&!faixasOk([{ate:'x',aliq:7.5}]));
+  T('cfgUsavel exige inss e irrf válidos',
+    cfgUsavel(CFG_PADRAO)&&!cfgUsavel({inss:[{ate:1,aliq:1}]})&&!cfgUsavel({inss:'quebrado',irrf:[]}));
+  T('carregarCfg reseta config corrompida da MESMA versão',(function(){
+    var bkp=localStorage.getItem('mxresc_cfg');
+    localStorage.setItem('mxresc_cfg',JSON.stringify({inss:'lixo',irrf:null,tabelaVersao:'2026.1'}));
+    var c=carregarCfg();
+    if(bkp!=null) localStorage.setItem('mxresc_cfg',bkp); else localStorage.removeItem('mxresc_cfg');
+    return Array.isArray(c.inss)&&c.inss[0].ate===1621.00;})());
+  T('carregarCfg reseta faixa sem número',(function(){
+    var bkp=localStorage.getItem('mxresc_cfg');
+    localStorage.setItem('mxresc_cfg',JSON.stringify({inss:[{ate:1621}],irrf:[{ate:0,aliq:0,ded:0}],tabelaVersao:'2026.1'}));
+    var c=carregarCfg();
+    if(bkp!=null) localStorage.setItem('mxresc_cfg',bkp); else localStorage.removeItem('mxresc_cfg');
+    return c.inss.length===4&&typeof c.inss[0].aliq==='number';})());
 
   /* --- motivo --- */
   T('motivo pedido antes de sem justa causa',motivoDoTexto('Pedido de demissão SEM justa causa')==='pedido');
