@@ -4210,7 +4210,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-07-30c';
+var BUILD='2026-07-30d';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
@@ -5338,6 +5338,34 @@ function boot(){
     if(window.console) console.log(r.resumo+'\n'+r.logs.join('\n'));
     window.__MXRESC_TESTE__=r;
   }
+  /* diagnóstico na tela (sem console): abre o painel Tabelas, mede e mostra um
+     cartão fixo com o estado — para depurar "painel em branco" à distância */
+  if(/[?&]diag=1/.test(location.search)) setTimeout(diagnostico,60);
+}
+function diagnostico(){
+  var linhas=[], erroMonta=null;
+  try{ abrirDrawer('tabelas'); }catch(e){ erroMonta=(e&&e.message)||String(e); }
+  var db=$('#drawerBody'), cards=db?db.querySelectorAll('.card'):[];
+  var b=cards&&cards[0]?cards[0].getBoundingClientRect():null;
+  var cfgOk=false; try{ cfgOk=cfgUsavel(CFG); }catch(e){}
+  linhas.push('build: '+BUILD);
+  linhas.push('navegador: '+(navigator.userAgent||'?').slice(0,60));
+  linhas.push('config válida: '+cfgOk+' · faixas INSS: '+(CFG&&CFG.inss?CFG.inss.length:'?'));
+  linhas.push('painel montou: '+(erroMonta?('ERRO — '+erroMonta):'ok'));
+  linhas.push('conteúdo (chars): '+(db?db.innerHTML.length:'sem #drawerBody'));
+  linhas.push('cards no painel: '+(cards?cards.length:0));
+  linhas.push('1º card (px): '+(b?Math.round(b.width)+' x '+Math.round(b.height):'—'));
+  var veredito = (cards&&cards.length>=5&&b&&b.height>10)
+    ? 'CONTEÚDO OK NO DOM. Se você vê BRANCO, é a placa de vídeo (envie este print).'
+    : 'CONTEÚDO NÃO MONTOU — é dado/JS, não vídeo.';
+  var box=el('div');
+  box.style.cssText='position:fixed;left:14px;top:14px;z-index:99999;max-width:520px;'+
+    'background:#0b0f18;border:2px solid #6C5CE7;border-radius:12px;padding:16px;'+
+    'font:13px/1.6 ui-monospace,Consolas,monospace;color:#EBEFF8;box-shadow:0 10px 40px #000';
+  box.innerHTML='<b style="color:#8E7CFF;font-size:14px">DIAGNÓSTICO MX RESCISÃO</b><br>'+
+    esc(linhas.join('\n')).replace(/\n/g,'<br>')+
+    '<br><br><b style="color:#FFB020">'+esc(veredito)+'</b>';
+  document.body.appendChild(box);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
 
