@@ -4,12 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MX Rescisão — conferência de verbas rescisórias</title>
+<link rel="icon" type="image/png" href="logo-maximos.png">
+<link rel="apple-touch-icon" href="logo-maximos.png">
 <style>
 /* ===== tokens ================================================== */
+/* Identidade MAXIMOS: verde (#24c191/#049c74) sobre carvão (#0f110d). */
 :root{
-  --brand:#6C5CE7; --brand2:#8E7CFF; --brand-soft:#6C5CE726;
-  --ok:#16C784; --erro:#FF4D6A; --alerta:#FFB020; --info:#4CA8FF;
-  --ok-soft:#16C78422; --erro-soft:#FF4D6A22; --alerta-soft:#FFB02022; --info-soft:#4CA8FF22;
+  --brand:#24c191; --brand2:#34d4a3; --brand-soft:#24c19126;
+  --ok:#24c191; --erro:#FF4D6A; --alerta:#FFB020; --info:#4CA8FF;
+  --ok-soft:#24c19122; --erro-soft:#FF4D6A22; --alerta-soft:#FFB02022; --info-soft:#4CA8FF22;
   --r-xs:6px; --r-sm:10px; --r:14px; --r-lg:20px;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -19,35 +22,36 @@
    com o body. Há motor que não revalida a propriedade `color` já computada quando as
    custom properties mudam no :root — a regra descendente permite forçar o recálculo
    reanexando o body (ver forcarRecalculo no script). */
-:root[data-tema="escuro"] body{background:#080A10;color:#EBEFF8}
-:root[data-tema="claro"]  body{background:#F1F3F9;color:#0D1327}
+:root[data-tema="escuro"] body{background:#0f110d;color:#eaece5}
+:root[data-tema="claro"]  body{background:#e8eae3;color:#191c15}
 :root,:root[data-tema="escuro"]{
-  --bg:#080A10; --sf:#111624; --sf2:#171E30; --sf3:#1E263B;
-  --line:#26304A; --line2:#333F5E;
-  --tx:#EBEFF8; --tx2:#98A3BC; --tx3:#8892AB;
+  --bg:#0f110d; --sf:#181c14; --sf2:#1f241a; --sf3:#282f22;
+  --line:#2f3628; --line2:#3f4835;
+  --tx:#eaece5; --tx2:#a7ac9f; --tx3:#868b7d;
   /* variantes para uso em TEXTO — as cores acima servem a bordas e fundos */
-  --ok-tx:#16C784; --erro-tx:#FF6B82; --alerta-tx:#FFB020; --info-tx:#4CA8FF; --brand-tx:#A294FF;
+  --ok-tx:#6fe0bd; --erro-tx:#FF6B82; --alerta-tx:#FFB020; --info-tx:#4CA8FF; --brand-tx:#6fe0bd;
   --sh:0 10px 34px rgba(0,0,0,.5); --sh-sm:0 2px 10px rgba(0,0,0,.35);
   --grid:#ffffff08;
   color-scheme:dark;
-  background:#080A10; color:#EBEFF8;
+  background:#0f110d; color:#eaece5;
 }
 :root[data-tema="claro"]{
-  --bg:#F1F3F9; --sf:#FFFFFF; --sf2:#F8FAFD; --sf3:#EEF2F9;
-  --line:#DFE5F0; --line2:#C9D2E3;
-  --tx:#0D1327; --tx2:#4E586F; --tx3:#5F6980;
-  --ok-tx:#0B7D53; --erro-tx:#C41E3D; --alerta-tx:#8A5A00; --info-tx:#0B5FBF; --brand-tx:#5B4BD6;
-  --sh:0 8px 28px rgba(15,23,52,.10); --sh-sm:0 1px 4px rgba(15,23,52,.07);
-  --grid:#0d132708;
+  --brand:#049c74; --brand2:#06b98a; --brand-soft:#049c7418;
+  --bg:#e8eae3; --sf:#ffffff; --sf2:#f3f5ef; --sf3:#eaede3;
+  --line:#dbe0d3; --line2:#c7ceba;
+  --tx:#191c15; --tx2:#51564b; --tx3:#7b8175;
+  --ok-tx:#036a4f; --erro-tx:#C41E3D; --alerta-tx:#8A5A00; --info-tx:#0B5FBF; --brand-tx:#036a4f;
+  --sh:0 8px 28px rgba(15,25,18,.10); --sh-sm:0 1px 4px rgba(15,25,18,.07);
+  --grid:#19271c08;
   color-scheme:light;
-  background:#F1F3F9; color:#0D1327;
+  background:#e8eae3; color:#191c15;
 }
 
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
 :focus-visible{outline:2px solid var(--brand-tx);outline-offset:2px;border-radius:var(--r-xs)}
-::selection{background:var(--brand);color:#fff}
+::selection{background:var(--brand);color:#06231a}
 
 /* ===== topbar ================================================== */
 .topbar{
@@ -56,12 +60,8 @@ body{margin:0;font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
   padding:12px 20px;background:var(--sf);border-bottom:1px solid var(--line);
 }
 .brand{display:flex;align-items:center;gap:11px;min-width:0}
-.mark{
-  width:36px;height:36px;flex:none;border-radius:11px;display:grid;place-items:center;
-  background:linear-gradient(145deg,var(--brand),#4A3BC4);
-  color:#fff;font:800 13px/1 var(--sans);letter-spacing:.5px;
-  box-shadow:0 4px 14px #6C5CE755;
-}
+.mark{width:38px;height:38px;flex:none;display:grid;place-items:center}
+.mark img{width:100%;height:100%;object-fit:contain;display:block}
 .brand b{display:block;font-size:15px;letter-spacing:-.2px}
 .brand span{display:block;font-size:11.5px;color:var(--tx3);letter-spacing:.2px}
 .build{margin-left:auto;font:600 11px var(--mono);color:var(--tx3);white-space:nowrap;letter-spacing:.2px}
@@ -77,7 +77,7 @@ body{margin:0;font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
 }
 .btn:hover{background:var(--sf3);border-color:var(--brand)}
 .btn:active{transform:scale(.975)}
-.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 4px 16px #6C5CE744}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#06231a;font-weight:700;box-shadow:0 4px 16px #24c19144}
 .btn.primary:hover{background:var(--brand2);border-color:var(--brand2)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--tx2)}
 .btn.ghost:hover{background:var(--sf2);color:var(--tx)}
@@ -314,14 +314,17 @@ input:focus,select:focus{outline:none;border-color:var(--brand)}
 /* sem backdrop-filter: o desfoque forçava o corpo do painel (camada de rolagem)
    a não compor em algumas GPUs no Windows, deixando o painel em branco */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:80}
+/* o PRÓPRIO painel rola; o cabeçalho gruda no topo. Sem um filho com
+   overflow:auto (camada de rolagem que falhava de pintar em algumas GPUs). */
 .drawer{
   position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100%;z-index:90;
   background:var(--sf);border-left:1px solid var(--line);box-shadow:var(--sh);
-  display:flex;flex-direction:column;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
 }
-.drawer-h{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.drawer-h{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:12px;
+  padding:16px 20px;border-bottom:1px solid var(--line);background:var(--sf)}
 .drawer-h b{font-size:16px;letter-spacing:-.2px;flex:1}
-.drawer-b{flex:1;overflow-y:auto;padding:20px}
+.drawer-b{padding:20px}
 .aviso{
   border-radius:var(--r-sm);padding:11px 13px;font-size:12.5px;margin-bottom:16px;line-height:1.5;
   background:var(--alerta-soft);border:1px solid #FFB02044;color:var(--tx)
@@ -402,8 +405,8 @@ input:focus,select:focus{outline:none;border-color:var(--brand)}
 
 <header class="topbar">
   <div class="brand">
-    <div class="mark" aria-hidden="true">MX</div>
-    <div><b>Rescisão</b><span>conferência de verbas rescisórias</span></div>
+    <div class="mark"><img src="logo-maximos.png" alt="MAXIMOS"></div>
+    <div><b>MX Rescisão</b><span>conferência de verbas rescisórias</span></div>
   </div>
   <span class="build" id="build" title="Versão desta página"></span>
   <div class="topact">
@@ -3382,6 +3385,11 @@ function abrirDrawer(modo){
   $('#scrim').hidden=false; $('#drawer').hidden=false;
   $('#btFecharDrawer').focus();
   document.body.style.overflow='hidden';
+  /* força um repaint: em algumas GPUs o conteúdo do painel só aparece após
+     um reflow. Ler offsetHeight e alternar transform garante a pintura. */
+  var dr=$('#drawer');
+  if(dr){ void dr.offsetHeight; dr.style.transform='translateZ(0)';
+    requestAnimationFrame(function(){ dr.style.transform=''; }); }
 }
 function abrirConvencoes(){ EDITANDO=null; abrirDrawer('convencoes'); }
 function pintarDrawer(){
@@ -4210,7 +4218,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-07-30d';
+var BUILD='2026-07-30e';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
@@ -5360,9 +5368,9 @@ function diagnostico(){
     : 'CONTEÚDO NÃO MONTOU — é dado/JS, não vídeo.';
   var box=el('div');
   box.style.cssText='position:fixed;left:14px;top:14px;z-index:99999;max-width:520px;'+
-    'background:#0b0f18;border:2px solid #6C5CE7;border-radius:12px;padding:16px;'+
-    'font:13px/1.6 ui-monospace,Consolas,monospace;color:#EBEFF8;box-shadow:0 10px 40px #000';
-  box.innerHTML='<b style="color:#8E7CFF;font-size:14px">DIAGNÓSTICO MX RESCISÃO</b><br>'+
+    'background:#0f110d;border:2px solid #24c191;border-radius:12px;padding:16px;'+
+    'font:13px/1.6 ui-monospace,Consolas,monospace;color:#eaece5;box-shadow:0 10px 40px #000';
+  box.innerHTML='<b style="color:#34d4a3;font-size:14px">DIAGNÓSTICO MX RESCISÃO</b><br>'+
     esc(linhas.join('\n')).replace(/\n/g,'<br>')+
     '<br><br><b style="color:#FFB020">'+esc(veredito)+'</b>';
   document.body.appendChild(box);
