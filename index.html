@@ -2006,7 +2006,7 @@ function auditar(d){
   if(decBase13!=null){
     cmp('erro',G,'Base do INSS do 13º',decBase13,espBase13,
       'Total do 13º proporcional + 13º do aviso indenizado = '+mo(espBase13)+'. O 13º tem incidência separada da folha.',
-      'Art. 214, §6º, Dec. 3.048/99 — o 13º sofre incidência isolada.','',0.05);
+      'Art. 214, §6º e §7º, Dec. 3.048/99 — o 13º sofre incidência isolada (cálculo em separado no §7º).','',0.05);
     rr(cods(C.d13,C.d13Aviso));
     var espI13=calcInss(decBase13), decI13=soma(C.inss13);
     if(decI13>0.001||espI13>0.001){
@@ -2021,7 +2021,7 @@ function auditar(d){
     var baseLiq=r2(decBaseIr-abatIr), espIr=calcIrrf(baseLiq), decIr=soma(C.irrf);
     cmp('alerta',G,'IRRF sobre a rescisão',decIr,espIr,
       'Base '+mo(decBaseIr)+' − deduções '+mo(abatIr)+' = '+mo(baseLiq)+'. Férias indenizadas, 1/3 sobre indenizadas e aviso indenizado são isentos.',
-      'Súmula 386 STJ / Súmula 125 STJ / IN RFB 1.500 art. 6º-7º','Confira a tabela do IRRF em Tabelas & regras.',0.05);
+      'Súmula 386 STJ (férias indenizadas e proporcionais + 1/3 isentas). Aviso prévio indenizado: isento por natureza indenizatória (IN RFB 1.500).','Confira a tabela do IRRF em Tabelas & regras.',0.05);
     rr(cods(C.irrf));
   }
 
@@ -2150,7 +2150,7 @@ function auditar(d){
           add('erro',G,'Indenização adicional da data-base não paga',
             'Término projetado em '+fd(terminoProj)+', dentro dos 30 dias que antecedem a data-base de '+fd(db)+
             '. É devido 1 salário mensal a mais.',
-            0,sal,'Lei 6.708/79, art. 9º + Súmula 182 TST (o aviso indenizado conta) e Súmula 314 TST (a projeção alcança a data-base).',
+            0,sal,'Lei 7.238/84, art. 9º (Súmula 242 TST) + Súmula 182 TST (o aviso indenizado conta) e Súmula 314 TST (a projeção alcança a data-base).',
             'Lance a indenização adicional de '+mo(sal)+'.');
         else add('ok',G,'Indenização adicional da data-base','Término em '+fd(terminoProj)+' cai na janela da data-base de '+fd(db)+' e a verba está lançada.');
       }
@@ -2382,10 +2382,10 @@ function auditar(d){
   if(f.categoria==='domestico'){
     add('alerta',G,'Empregado doméstico — regime próprio do FGTS',
       'O doméstico tem 8% de FGTS mais 3,2% de depósito indenizatório mensal, que substitui a multa de 40%.',
-      null,null,'Art. 22 da LC 150/2015','Na dispensa sem justa causa o empregado saca os 3,2%; não se lança multa de 40%.');
+      null,null,'Arts. 21 e 22 da LC 150/2015 (8% no art. 21; 3,2% no art. 22)','Na dispensa sem justa causa o empregado saca os 3,2%; não se lança multa de 40%.');
     if((B['FGTS 40%']||0)>0.02)
       add('erro',G,'Multa de 40% para empregado doméstico',
-        'O doméstico não tem multa de 40% — tem o depósito indenizatório de 3,2%.',B['FGTS 40%'],0,'Art. 22 da LC 150/2015','');
+        'O doméstico não tem multa de 40% — tem o depósito indenizatório de 3,2%.',B['FGTS 40%'],0,'Arts. 21 e 22 da LC 150/2015 (8% no art. 21; 3,2% no art. 22)','');
   }
   var cs10=B['Contribuição Social 10%'];
   if(cs10!=null&&cs10>0.02)
@@ -2418,7 +2418,7 @@ function auditar(d){
     if(!temRub(d,/COMISS/,'P')&&!temRub(d,/M[EÉ]DIA/,'P'))
       add('erro',G,'Comissões habituais sem média nas verbas',
         'Comissões integram a remuneração e devem compor a média de 13º, férias e aviso.',
-        null,null,'Súmulas 27, 340 e OJ 397 da SDI-1 do TST','');
+        null,null,'Súmula 340 e OJ 397 SDI-1 TST (comissionista) + Súmulas 45 e 347 TST (habituais integram)','');
     if(!temRub(d,/DSR|REPOUSO/,'P'))
       add('alerta',G,'Reflexo das comissões no DSR',
         'Comissões geram reflexo no descanso semanal remunerado e nenhuma rubrica de DSR aparece.',
@@ -2427,7 +2427,7 @@ function auditar(d){
   if(f.gorjetas)
     add('alerta',G,'Gorjetas integram a remuneração',
       'Gorjetas integram para 13º, férias e FGTS, mas não para aviso prévio, adicional noturno, horas extras e DSR.',
-      null,null,'Art. 457, §3º, CLT e Súmula 354 TST','Confira quais verbas usaram a base com gorjetas.');
+      null,null,'Art. 457, caput, CLT e Súmula 354 TST','Confira quais verbas usaram a base com gorjetas.');
   if(d.tipoAviso==='trabalhado'){
     if(f.avisoReducao==='nenhuma')
       add('erro',G,'Aviso trabalhado sem a redução legal',
@@ -2465,8 +2465,8 @@ function auditar(d){
   obrigacao(f.guiasSD,!!reg.seguro,'Guias do seguro-desemprego',
     'As guias não foram entregues, e o motivo lançado dá direito ao benefício.',
     'Não foi informado se as guias do seguro-desemprego foram entregues.',
-    'Art. 477, §10, CLT e Lei 7.998/90 — a falta das guias gera indenização substitutiva (Súmula 389 TST).',
-    'Entregue as guias ou provisione a indenização.');
+    'Súmula 389 TST — a falta gera indenização substitutiva. Lei 7.998/90; após a Reforma (art. 477, §10, CLT), a anotação da baixa na CTPS habilita o benefício.',
+    'Garanta a habilitação ao benefício (baixa na CTPS/guias) ou provisione a indenização.');
   if(f.dispensaColetiva)
     add('info',G,'Dispensa coletiva',
       'A dispensa coletiva não depende de autorização prévia do sindicato nem de acordo coletivo.',
@@ -3512,12 +3512,12 @@ var LEIS=[
   ['Art. 439','Assistência ao menor de 18 anos','Conferido pela data de nascimento'],
   ['Art. 445, § único','Experiência no máximo 90 dias','Conferido pelos fatos do contrato'],
   ['Art. 462','Descontos permitidos','Conferido nos descontos lançados'],
-  ['Art. 467','Dobra das verbas incontroversas','Só em processo — não conferido'],
+  ['Art. 467','Verbas incontroversas não pagas na 1ª audiência: +50% (não mais dobro)','Só em processo — não conferido'],
   ['Art. 476','Suspensão do contrato no benefício do INSS','Conferido pelos fatos do contrato'],
   ['Art. 477, §5º','Compensação limitada a uma remuneração','Conferido'],
   ['Art. 477, §6º','Prazo de 10 dias corridos','Conferido, com o encurtamento da convenção'],
   ['Art. 477, §8º','Multa de um salário pelo atraso','Conferido'],
-  ['Art. 477, §10','Entrega das guias do seguro-desemprego','Conferido pelos fatos do contrato'],
+  ['Art. 477, §10 + Súmula 389 TST','Habilitação ao seguro-desemprego (anotação na CTPS)','Conferido pelos fatos do contrato'],
   ['Art. 477-A','Dispensa coletiva sem autorização sindical','Informativo'],
   ['Art. 479 e 480','Rompimento antecipado do contrato determinado','Conferido pelos fatos do contrato'],
   ['Art. 481','Cláusula assecuratória','Conferido pelos fatos do contrato'],
@@ -3534,12 +3534,12 @@ var LEIS=[
   ['Art. 73','Adicional noturno','Conferido pelos fatos do contrato'],
   ['Art. 192 e 193','Insalubridade e periculosidade','Conferido pelos fatos do contrato'],
   ['Art. 457, §2º','Prêmios, diárias e ajuda de custo não integram','Não conferido'],
-  ['Art. 457, §3º','Gorjetas','Conferido pelos fatos do contrato'],
+  ['Art. 457, caput','Gorjetas integram a remuneração','Conferido pelos fatos do contrato'],
   ['Art. 58-A e 452-A','Regime parcial e intermitente','Alerta pelos fatos do contrato']]],
  ['Leis e decretos',[
   ['Lei 4.090/62','13º salário proporcional','Conferido'],
   ['Lei 605/49','Descanso semanal remunerado','Conferido nos reflexos'],
-  ['Lei 6.708/79, art. 9º','Indenização adicional da data-base','Conferido pela convenção'],
+  ['Lei 7.238/84, art. 9º (e 6.708/79)','Indenização adicional da data-base','Conferido pela convenção'],
   ['Lei 7.998/90','Seguro-desemprego','Conferido pelos fatos do contrato'],
   ['Lei 8.036/90, art. 15 e 18','FGTS, alíquotas e multa rescisória','Conferido'],
   ['Lei 8.036/90, art. 15, §7º','FGTS do aprendiz a 2%','Conferido pelos fatos do contrato'],
@@ -3549,15 +3549,15 @@ var LEIS=[
   ['Lei 9.250/95, art. 4º','Dedução de dependentes no IRRF','Alerta pelos fatos do contrato'],
   ['Lei 12.506/2011','Aviso prévio proporcional','Conferido'],
   ['LC 110/2001, art. 1º','Contribuição de 10% — revogada pela Lei 13.932/2019','Conferido: deve ser zero'],
-  ['LC 150/2015, art. 22','FGTS do doméstico: 8% + 3,2%','Conferido pelos fatos do contrato'],
-  ['Dec. 3.048/99, art. 214, §6º','INSS do 13º em separado','Conferido'],
+  ['LC 150/2015, art. 21 e 22','FGTS do doméstico: 8% (art. 21) + 3,2% (art. 22)','Conferido pelos fatos do contrato'],
+  ['Dec. 3.048/99, art. 214, §6º e §7º','INSS do 13º em separado (§7º)','Conferido'],
   ['Dec. 95.247/87, art. 9º','Vale-transporte limitado a 6%','Conferido'],
   ['NR-7 e art. 168, II, CLT','Exame demissional','Conferido pelos fatos do contrato']]],
  ['Súmulas e orientações',[
-  ['Súmula 27, 340 e OJ 397 TST','Comissões: DSR e médias','Conferido pelos fatos do contrato'],
+  ['Súmula 27 (DSR), 340 e OJ 397 SDI-1 (horas extras) TST','Comissões: reflexo no DSR e médias','Conferido pelos fatos do contrato'],
   ['Súmula 45, 60, 172 e 347 TST','Habituais integram 13º, férias e aviso','Conferido'],
   ['Súmula 81 TST','Férias em dobro','Conferido'],
-  ['Súmula 125 e 386 STJ','Aviso e férias indenizadas sem IRRF','Considerado nas bases'],
+  ['Súmula 386 STJ','Férias indenizadas/proporcionais + 1/3 sem IRRF (aviso indenizado: isento por natureza indenizatória)','Considerado nas bases'],
   ['Súmula 163 TST','Aviso na cláusula assecuratória','Conferido pelos fatos do contrato'],
   ['Súmula 171 TST','Justa causa faz perder férias proporcionais','Conferido'],
   ['Súmula 182 e 314 TST','Projeção do aviso alcança a data-base','Conferido pela convenção'],
@@ -3583,7 +3583,12 @@ var LIMITES=[
  'Não substitui a leitura do TRCT e do extrato do FGTS antes de fechar.'
 ];
 function htmlLeis(){
-  var h='<div class="aviso">Este índice mostra <b>o que a ferramenta sabe conferir e como</b>. '+
+  var h='<div class="aviso" style="background:var(--ok-soft);border:1px solid #24c19144">'+
+    '<b>Citações conferidas em 30/07/2026</b> contra as fontes oficiais — CLT e leis no '+
+    '<b>Planalto</b>, súmulas no <b>TST</b>, precedentes no <b>STJ</b> e <b>STF</b>. Das 68 verificadas, '+
+    '8 tiveram a referência corrigida (número/parágrafo); nenhuma regra que gera valor estava errada. '+
+    'Ainda assim, confira a fonte antes de fechar um caso — a lei muda.</div>'+
+    '<div class="aviso">Este índice mostra <b>o que a ferramenta sabe conferir e como</b>. '+
     'Regra marcada como "conferido pelos fatos do contrato" só roda depois que o bloco de fatos for respondido.</div>';
   for(var i=0;i<LEIS.length;i++){
     h+='<div class="card"><h3>'+esc(LEIS[i][0])+'</h3><table><tbody>';
@@ -3731,7 +3736,7 @@ function htmlEditorCct(){
     num('e_mval','Quantidade / valor da multa',c.pagamento.multaValor,'1')+
     '<div></div>'+
     chk('e_mcum','A multa da convenção soma-se à do art. 477, §8º',c.pagamento.multaCumulativa)+
-    chk('e_dbind','Prevê a indenização adicional da data-base (Lei 6.708/79, art. 9º)',c.dataBaseIndeniz)+
+    chk('e_dbind','Prevê a indenização adicional da data-base (Lei 7.238/84, art. 9º)',c.dataBaseIndeniz)+
     '</div></div>';
 
   h+='<div class="card"><h3>Homologação e contribuições</h3><div class="form" style="padding:16px">'+
@@ -4218,7 +4223,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-07-30e';
+var BUILD='2026-07-30f';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
