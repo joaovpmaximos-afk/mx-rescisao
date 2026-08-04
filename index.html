@@ -1004,6 +1004,10 @@ var CFG_PADRAO={
         {ate:0,aliq:27.5,ded:896.00}],
   dep:189.59, simp:564.80, isencao:5000,
   fgts:8, multa:40, horasMes:220, prazoPgto:10,
+  /* divisor do saldo de salário / desconto de faltas em mês incompleto:
+     'ambos' = aceita ÷30 e ÷dias-do-mês (as duas correntes são defensáveis);
+     '30' = escritório adota o mês comercial; 'diasMes' = usa os dias reais. */
+  criterioSaldo:'ambos',
   /* muda quando as tabelas oficiais mudam: força a atualização em quem já
      tem uma versão antiga salva no navegador */
   tabelaVersao:'2026.1'
@@ -1900,19 +1904,41 @@ function auditar(d){
   G='Valores das verbas';
   if(C.saldo.length&&sal>0&&d.demissao){
     var diasSaldo=Math.round(C.saldo[0].refN), vSaldo=soma(C.saldo);
-    var espSaldo=r2(sal/30*diasSaldo);
-    var alt31=r2(sal/ultimoDiaMes(d.demissao.getUTCFullYear(),d.demissao.getUTCMonth())*diasSaldo);
+    var diasMes=ultimoDiaMes(d.demissao.getUTCFullYear(),d.demissao.getUTCMonth());
+    var esp30=r2(sal/30*diasSaldo), espDM=r2(sal/diasMes*diasSaldo);
+    var crit=CFG.criterioSaldo||'ambos';
     if(diasSaldo!==d.demissao.getUTCDate()){
       add('alerta',G,'Dias de saldo de salário','Demissão dia '+d.demissao.getUTCDate()+' e saldo de '+diasSaldo+' dia(s).',diasSaldo,d.demissao.getUTCDate(),'Art. 64 CLT','Confira faltas/afastamentos que justifiquem a diferença.');
       un('dias'); rr(cods(C.saldo));
     }
-    if(ok2(vSaldo,espSaldo)) add('ok',G,'Saldo de salário','Confere: '+mo(sal)+' / 30 × '+diasSaldo+' dias.',vSaldo,espSaldo);
-    else if(ok2(vSaldo,alt31))
-      add('erro',G,'Saldo de salário dividido pelos dias do mês (não por 30)',
-        'O sistema usou '+mo(sal)+' / '+ultimoDiaMes(d.demissao.getUTCFullYear(),d.demissao.getUTCMonth())+' × '+diasSaldo+'. O mês do salário é sempre de 30 dias.',
-        vSaldo,espSaldo,'Art. 64 CLT — o salário-dia é a remuneração mensal dividida por 30.',
-        'Diferença a pagar ao empregado: '+mo(espSaldo-vSaldo)+'.');
-    else cmp('erro',G,'Saldo de salário',vSaldo,espSaldo,mo(sal)+' / 30 × '+diasSaldo+' dias.','Art. 64 CLT','');
+    var m30=ok2(vSaldo,esp30), mDM=ok2(vSaldo,espDM);
+    /* Divisor do saldo em mês incompleto: há DUAS correntes defensáveis — ÷30
+       (mês comercial, art. 64 caput) e ÷dias-reais-do-mês (art. 64 § único +
+       jurisprudência do TRT). O app não trata isso como erro fechado: sob o
+       critério 'ambos' (padrão) aceita as duas e só alerta a divergência; se o
+       escritório fixar um critério em Tabelas & regras, aí sim cobra contra ele. */
+    var baseDiv='Art. 64 CLT — o caput usa o divisor 30 (mês comercial). O parágrafo único e parte da jurisprudência (TRT) adotam, no saldo de mês incompleto, os dias reais do mês. As duas correntes são defensáveis.';
+    if(diasMes===30||esp30===espDM){
+      cmp('erro',G,'Saldo de salário',vSaldo,esp30,mo(sal)+' / 30 × '+diasSaldo+' dias.','Art. 64 CLT','');
+    } else if(crit==='30'){
+      if(m30) add('ok',G,'Saldo de salário','Confere pelo divisor 30 (critério do escritório): '+mo(sal)+' / 30 × '+diasSaldo+' dias.',vSaldo,esp30);
+      else if(mDM) add('erro',G,'Saldo pelos dias do mês, mas o critério do escritório é ÷30',
+        'O cálculo usou '+mo(sal)+' / '+diasMes+' × '+diasSaldo+' = '+mo(espDM)+'. O critério fixado em Tabelas & regras é o divisor 30 = '+mo(esp30)+'.',
+        vSaldo,esp30,baseDiv,'Diferença até o divisor 30: '+mo(esp30-espDM)+' a pagar ao empregado. Se o escritório aceita os dias do mês, troque o critério em Tabelas & regras.');
+      else cmp('erro',G,'Saldo de salário',vSaldo,esp30,mo(sal)+' / 30 × '+diasSaldo+' dias.','Art. 64 CLT','');
+    } else if(crit==='diasMes'){
+      if(mDM) add('ok',G,'Saldo de salário','Confere pelos dias do mês ('+diasMes+', critério do escritório): '+mo(sal)+' / '+diasMes+' × '+diasSaldo+' dias.',vSaldo,espDM);
+      else if(m30) add('erro',G,'Saldo pelo divisor 30, mas o critério do escritório é dias do mês',
+        'O cálculo usou '+mo(sal)+' / 30 × '+diasSaldo+' = '+mo(esp30)+'. O critério fixado é os dias reais do mês ('+diasMes+') = '+mo(espDM)+'.',
+        vSaldo,espDM,baseDiv,'Diferença até o divisor '+diasMes+': '+mo(esp30-espDM)+' pago a mais ao empregado.');
+      else cmp('erro',G,'Saldo de salário',vSaldo,espDM,mo(sal)+' / '+diasMes+' × '+diasSaldo+' dias.','Art. 64 CLT','');
+    } else {
+      if(m30&&!mDM) add('ok',G,'Saldo de salário','Confere pelo divisor 30 (mês comercial): '+mo(sal)+' / 30 × '+diasSaldo+' dias. Pelos dias do mês ('+diasMes+') daria '+mo(espDM)+'.',vSaldo,esp30);
+      else if(mDM&&!m30) add('alerta',G,'Saldo pelo divisor dos dias do mês ('+diasMes+'), não por 30',
+        'O cálculo dividiu por '+diasMes+' (dias do mês) = '+mo(espDM)+'. Pela corrente tradicional (÷30, mês comercial) daria '+mo(esp30)+' — diferença de '+mo(esp30-espDM)+'. As duas correntes são aceitas: não é erro. Defina o critério do escritório em Tabelas & regras para eu conferir contra ele.',
+        vSaldo,esp30,baseDiv,'Escolha o critério do escritório em Tabelas & regras (divisor 30 ou dias do mês).');
+      else cmp('erro',G,'Saldo de salário',vSaldo,esp30,mo(sal)+' / 30 × '+diasSaldo+' dias.','Art. 64 CLT','');
+    }
     rr(cods(C.saldo));
   }
 
@@ -3459,6 +3485,8 @@ function htmlTabelas(){
      campo('cMulta','Multa rescisória %',String(CFG.multa).replace('.',','))+
      campo('cHoras','Jornada mensal (horas)',String(CFG.horasMes).replace('.',','))+
      campo('cPrazo','Prazo de pagamento (dias)',String(CFG.prazoPgto))+
+     campoSel('cCritSaldo','Divisor do saldo de salário',{ambos:'Aceitar ÷30 e dias do mês (padrão)','30':'Sempre ÷30 (mês comercial)',diasMes:'Dias reais do mês (28/29/30/31)'},CFG.criterioSaldo||'ambos')+
+     '<div class="full" style="color:var(--tx2);font-size:12px;margin:-4px 0 4px">Mês incompleto (admissão/demissão): as duas correntes são legais. No padrão o app só alerta a divergência; fixe uma para eu cobrar contra ela.</div>'+
      '<div class="full"><button class="btn" id="bResetCfg">Restaurar padrão</button></div>'+
      '</div></div>';
 
@@ -3508,7 +3536,7 @@ var LEIS=[
   ['Art. 10, II, "a", ADCT','Estabilidade do membro da CIPA','Conferido pelos fatos do contrato'],
   ['Art. 10, II, "b", ADCT','Estabilidade da gestante','Conferido pelos fatos do contrato']]],
  ['CLT — aviso prévio e rescisão',[
-  ['Art. 64','Salário-dia é a remuneração dividida por 30','Conferido no saldo e nas faltas'],
+  ['Art. 64','Salário-hora do mensalista pelo divisor 30. Caput usa ÷30 (mês comercial); o § único e parte da jurisprudência (TRT) adotam os dias reais do mês no saldo de mês incompleto','Divisor do saldo é configurável em Tabelas & regras (aceita as duas correntes)'],
   ['Art. 439','Assistência ao menor de 18 anos','Conferido pela data de nascimento'],
   ['Art. 445, § único','Experiência no máximo 90 dias','Conferido pelos fatos do contrato'],
   ['Art. 462','Descontos permitidos','Conferido nos descontos lançados'],
@@ -3928,6 +3956,7 @@ function lerTabelas(){
     CFG.dep=nb($('#cDep').value); CFG.simp=nb($('#cSimp').value); CFG.isencao=nb($('#cIsen').value);
     CFG.fgts=nb($('#cFgts').value); CFG.multa=nb($('#cMulta').value);
     CFG.horasMes=nb($('#cHoras').value)||220; CFG.prazoPgto=nb($('#cPrazo').value)||10;
+    if($('#cCritSaldo')) CFG.criterioSaldo=$('#cCritSaldo').value||'ambos';
   }
 }
 
@@ -4223,7 +4252,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-07-30f';
+var BUILD='2026-08-04a';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
@@ -4608,8 +4637,8 @@ function autoteste(){
   T('P2 soma descontos bate',ok2(sd2,3812.71,0.05),r2(sd2));
 
   var r2r=auditar(d2), F2=r2r.findings;
-  T('A2 saldo /31 detectado',achaSev(F2,/dividido pelos dias do m[eê]s/,'erro')!=null);
-  T('A2 diferença do saldo = 53,77',(function(){var f=acha(F2,/dividido pelos dias/);return f&&ok2(f.dif,53.77,0.02);})(),(acha(F2,/dividido pelos dias/)||{}).dif);
+  T('A2 saldo /31 é divergência (alerta), não erro',achaSev(F2,/divisor dos dias do m[eê]s/,'alerta')!=null);
+  T('A2 divergência do saldo mostra os 53,77',(function(){var f=acha(F2,/divisor dos dias do m[eê]s/);return f&&ok2(f.dif,53.77,0.02);})(),(acha(F2,/divisor dos dias do m[eê]s/)||{}).dif);
   T('A2 avos de 13º ok',achaSev(F2,/Avos de 13/,'ok')!=null);
   T('A2 avos de férias ok',achaSev(F2,/Avos de f[eé]rias/,'ok')!=null);
   T('A2 terço constitucional ok',achaSev(F2,/Ter[cç]o constitucional/,'ok')!=null,(acha(F2,/Ter[cç]o/)||{}).dif);
@@ -4627,7 +4656,16 @@ function autoteste(){
   T('A2 sem falso positivo de compensação',acha(F2,/Compensa[cç][aã]o acima/)==null);
   T('A2 alerta de descontos totais',achaSev(F2,/Descontos totais acima/,'alerta')!=null);
   var e2=[];for(i=0;i<F2.length;i++)if(F2[i].sev==='erro')e2.push(F2[i].titulo);
-  T('A2 único erro é o saldo /31',e2.length===1,e2.join(' | '));
+  T('A2 nenhum erro (saldo /31 virou divergência de critério)',e2.length===0,e2.join(' | '));
+  /* critério do saldo configurável em mês incompleto de 31 dias (art. 64 CLT) */
+  var critAntes=CFG.criterioSaldo;
+  CFG.criterioSaldo='30';      var F2b=auditar(d2).findings;
+  T('A2 critério ÷30: /31 vira erro',achaSev(F2b,/Saldo pelos dias do m[eê]s/,'erro')!=null);
+  T('A2 critério ÷30: impacto = 53,77',ok2(contagem(F2b).impacto,53.77,0.02),contagem(F2b).impacto);
+  CFG.criterioSaldo='diasMes'; var F2c=auditar(d2).findings;
+  T('A2 critério dias-do-mês: /31 confere',achaSev(F2c,/^Saldo de sal[aá]rio$/,'ok')!=null);
+  T('A2 critério dias-do-mês: sem erro de saldo',contagem(F2c).impacto===0,contagem(F2c).impacto);
+  CFG.criterioSaldo=critAntes;
 
   /* --- contagem e veredito --- */
   var cg1=contagem(F1), cg2=contagem(F2);
@@ -4640,7 +4678,7 @@ function autoteste(){
       &&acha(F1,/Multa do FGTS conferida contra o próprio cálculo/)!=null,
     (function(){var s=[];for(var i=0;i<F1.length;i++)if(F1[i].sev==='alerta')s.push(F1[i].titulo);return s.join(' | ');})());
   T('V1 impacto zero no caso correto',ok2(cg1.impacto,0),cg1.impacto);
-  T('V2 impacto = 53,77',ok2(cg2.impacto,53.77,0.02),cg2.impacto);
+  T('V2 impacto zero sob critério padrão (divergência não é erro)',ok2(cg2.impacto,0),cg2.impacto);
   T('V2 tem conferidos ok',cg2.ok>10,cg2.ok);
 
   /* unidades: dias, avos e % não podem entrar na soma em reais */
