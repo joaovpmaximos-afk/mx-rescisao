@@ -2096,8 +2096,28 @@ function auditar(d){
           fr.ref+' h × valor-hora '+mo(vh)+' ('+mo(sal)+' / '+CFG.horasMes+').','Art. 64 CLT','Confira a jornada mensal contratada em Tabelas & regras.',0.1);
         rr([fr.cod]);
       } else if(/DIAS?/.test(nu)){
-        cmp('erro',G,'Desconto de faltas — '+fr.nome,fr.valor,r2(sal/30*fr.refN),
-          Math.round(fr.refN)+' dia(s) × '+mo(sal/30)+'.','Art. 64 CLT','',0.05);
+        /* o desconto de falta usa o mesmo salário-dia do saldo: segue o
+           critério configurado (÷30 x dias do mês). Ver bloco do saldo. */
+        var fEsp30=r2(sal/30*fr.refN), fdm=d.demissao?ultimoDiaMes(d.demissao.getUTCFullYear(),d.demissao.getUTCMonth()):30;
+        var fEspDM=d.demissao?r2(sal/fdm*fr.refN):fEsp30, fCrit=CFG.criterioSaldo||'ambos';
+        var fm30=ok2(fr.valor,fEsp30,0.05), fmDM=ok2(fr.valor,fEspDM,0.05);
+        var baseF='Art. 64 CLT — o desconto de falta segue o mesmo divisor do salário-dia: ÷30 (mês comercial, caput) ou dias reais do mês (§ único/jurisprudência). Use o mesmo critério do saldo.';
+        var nd=Math.round(fr.refN);
+        if(!d.demissao||fdm===30||fEsp30===fEspDM){
+          cmp('erro',G,'Desconto de faltas — '+fr.nome,fr.valor,fEsp30,nd+' dia(s) × '+mo(sal/30)+'.','Art. 64 CLT','',0.05);
+        } else if(fCrit==='30'){
+          if(fm30) add('ok',G,'Desconto de faltas — '+fr.nome,nd+' dia(s) × '+mo(sal/30)+' (÷30, critério do escritório).',fr.valor,fEsp30);
+          else if(fmDM) add('erro',G,'Falta descontada pelos dias do mês, mas o critério é ÷30','O desconto usou '+mo(sal)+' / '+fdm+' × '+nd+' = '+mo(fEspDM)+'. O critério fixado é ÷30 = '+mo(fEsp30)+'.',fr.valor,fEsp30,baseF,'Diferença: '+mo(Math.abs(fEsp30-fEspDM))+'.');
+          else cmp('erro',G,'Desconto de faltas — '+fr.nome,fr.valor,fEsp30,nd+' dia(s) × '+mo(sal/30)+'.','Art. 64 CLT','',0.05);
+        } else if(fCrit==='diasMes'){
+          if(fmDM) add('ok',G,'Desconto de faltas — '+fr.nome,nd+' dia(s) × '+mo(sal/fdm)+' (÷'+fdm+', dias do mês).',fr.valor,fEspDM);
+          else if(fm30) add('erro',G,'Falta descontada pelo divisor 30, mas o critério é dias do mês','O desconto usou '+mo(sal)+' / 30 × '+nd+' = '+mo(fEsp30)+'. O critério fixado é os dias do mês ('+fdm+') = '+mo(fEspDM)+'.',fr.valor,fEspDM,baseF,'Diferença: '+mo(Math.abs(fEsp30-fEspDM))+'.');
+          else cmp('erro',G,'Desconto de faltas — '+fr.nome,fr.valor,fEspDM,nd+' dia(s) × '+mo(sal/fdm)+'.','Art. 64 CLT','',0.05);
+        } else {
+          if(fm30&&!fmDM) add('ok',G,'Desconto de faltas — '+fr.nome,nd+' dia(s) × '+mo(sal/30)+' (÷30). Pelos dias do mês daria '+mo(fEspDM)+'.',fr.valor,fEsp30);
+          else if(fmDM&&!fm30) add('alerta',G,'Falta descontada pelos dias do mês ('+fdm+'), não por 30','O desconto usou '+mo(sal)+' / '+fdm+' × '+nd+' = '+mo(fEspDM)+'. Por ÷30 daria '+mo(fEsp30)+' — diferença '+mo(Math.abs(fEsp30-fEspDM))+'. As duas correntes são aceitas; use o mesmo critério do saldo em Tabelas & regras.',fr.valor,fEsp30,baseF,'');
+          else cmp('erro',G,'Desconto de faltas — '+fr.nome,fr.valor,fEsp30,nd+' dia(s) × '+mo(sal/30)+'.','Art. 64 CLT','',0.05);
+        }
         rr([fr.cod]);
       }
     }
@@ -4666,6 +4686,22 @@ function autoteste(){
   T('A2 critério dias-do-mês: /31 confere',achaSev(F2c,/^Saldo de sal[aá]rio$/,'ok')!=null);
   T('A2 critério dias-do-mês: sem erro de saldo',contagem(F2c).impacto===0,contagem(F2c).impacto);
   CFG.criterioSaldo=critAntes;
+  /* desconto de faltas segue o MESMO critério do saldo (números reais: 2.850 / 31 × 15) */
+  var EXF=['RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO',
+    'Empregado: 99 - TESTE FALTA CTPS: 9999999 / 0001 - SP',
+    'Cargo: AJUDANTE PIS: 111.11111.11-1 Data nascto: 01/01/1990 Salário: 2.850,00',
+    'Data admissão: 01/01/2026 Data demissão: 29/07/2026',
+    'Motivo demissão: Dispensa SEM justa causa Data pagamento: 30/07/2026',
+    'Salários','9180 SALDO DE SALARIO DIAS 29,00 2.666,13',
+    'Descontos','8060 DIAS FALTAS 15,00 1.379,03','Totais: 2.666,13 1.379,03'];
+  var dEXF=parseAnalitico(EXF.join('\n')), cSa=CFG.criterioSaldo;
+  CFG.criterioSaldo='ambos';   var Ff=auditar(dEXF).findings;
+  T('F falta /31 é divergência (alerta) no padrão',achaSev(Ff,/Falta descontada pelos dias do m[eê]s/,'alerta')!=null);
+  CFG.criterioSaldo='30';      var Ff2=auditar(dEXF).findings;
+  T('F critério ÷30: falta /31 vira erro',achaSev(Ff2,/Falta descontada pelos dias do m[eê]s/,'erro')!=null);
+  CFG.criterioSaldo='diasMes'; var Ff3=auditar(dEXF).findings;
+  T('F critério dias-do-mês: falta /31 confere',achaSev(Ff3,/^Desconto de faltas/,'ok')!=null);
+  CFG.criterioSaldo=cSa;
 
   /* --- contagem e veredito --- */
   var cg1=contagem(F1), cg2=contagem(F2);
