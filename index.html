@@ -310,6 +310,13 @@ input{font-family:var(--mono);font-variant-numeric:tabular-nums}
 input:focus,select:focus{outline:none;border-color:var(--brand)}
 .form .full{grid-column:1/-1}
 
+/* pré-configuração na tela de entrada: convenção + divisor antes de anexar */
+.pre-config{max-width:720px;margin:16px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left}
+.pre-config .pc-item{display:flex;flex-direction:column;gap:5px;min-width:0}
+.pre-config label{font:600 11px var(--sans);color:var(--tx2);display:flex;align-items:center;gap:6px}
+.pre-config .pc-hint{font:500 11px var(--sans);color:var(--tx3);margin:6px auto 0;max-width:720px;text-align:center}
+@media(max-width:640px){.pre-config{grid-template-columns:1fr}}
+
 /* ===== drawer de tabelas ======================================= */
 /* sem backdrop-filter: o desfoque forçava o corpo do painel (camada de rolagem)
    a não compor em algumas GPUs no Windows, deixando o painel em branco */
@@ -445,6 +452,22 @@ input:focus,select:focus{outline:none;border-color:var(--brand)}
     </div>
     <div id="msg1"></div>
   </div>
+
+  <div class="pre-config" id="preConfig">
+    <div class="pc-item">
+      <label for="preCct">Convenção coletiva</label>
+      <select id="preCct"><option value="">— definir pelo CNPJ / depois —</option></select>
+    </div>
+    <div class="pc-item">
+      <label for="preCrit">Divisor do saldo e das faltas</label>
+      <select id="preCrit">
+        <option value="ambos">Aceitar ÷30 e dias do mês (padrão)</option>
+        <option value="30">A empresa divide por 30 (mês comercial)</option>
+        <option value="diasMes">A empresa divide pelos dias do mês (28/29/30/31)</option>
+      </select>
+    </div>
+  </div>
+  <p class="pc-hint">Escolha aqui antes de anexar: a convenção e o divisor já entram no cálculo e cortam os alertas de critério.</p>
 
   <div class="exemplos">
     <h2>ou abra um caso já conferido</h2>
@@ -2884,6 +2907,7 @@ function anosContrato(d){
 
 /* ================================ UI =================================== */
 var ATUAL=null, RES=null, FILTRO='prob';
+var PRE_CCT='';   /* convenção pré-escolhida na tela de entrada (vence a sugestão por CNPJ) */
 
 function renderTudo(d){
   ATUAL=d;
@@ -3466,6 +3490,8 @@ function fecharDrawer(){
   $('#scrim').hidden=true; $('#drawer').hidden=true;
   document.body.style.overflow='';
   if(ATUAL) renderTudo(ATUAL);
+  popularPreCct();                                                 /* nova convenção cadastrada aparece na tela de entrada */
+  var _cr=$('#preCrit'); if(_cr) _cr.value=CFG.criterioSaldo||'ambos'; /* critério mudado em Tabelas reflete no seletor da entrada */
   $('#btTabelas').focus();
 }
 function htmlTabelas(){
@@ -4234,7 +4260,7 @@ function msg(cls,txt){$('#msg1').innerHTML='<div class="msg '+cls+'">'+txt+'</di
 function processar(){
   var d=parseAnalitico($('#txt').value);
   if(d.erros.length&&!d.rubricas.length){ msg('err',d.erros.join('<br>')); return null; }
-  d.cctId=cctSugerida(d);
+  d.cctId=PRE_CCT?PRE_CCT:cctSugerida(d);
   d.fatos=fatosPadrao();
   d.trct=TRCT_PENDENTE; TRCT_PENDENTE=null;
   d.medias=MEDIAS_PENDENTES; MEDIAS_PENDENTES=[];
@@ -4250,7 +4276,38 @@ function voltarEntrada(){
   $('#btNovo').hidden=true; $('#btPrint').hidden=true;
   $('#txt').value=''; $('#msg1').innerHTML='';
   $('#areaTexto').hidden=true;
+  popularPreCct();
   $('#bAbrir').focus();
+}
+
+/* pré-configuração da tela de entrada: convenção + divisor antes de anexar */
+function popularPreCct(){
+  var sc=$('#preCct'); if(!sc) return;
+  var atual=sc.value||PRE_CCT||'';
+  var h='<option value="">— definir pelo CNPJ / depois —</option>';
+  for(var i=0;i<CCTS.length;i++){
+    var c=CCTS[i];
+    h+='<option value="'+esc(c.id)+'">'+esc(c.nome||'(sem nome)')+
+       (c.vigIni||c.vigFim?' · '+(c.vigIni||'?')+' a '+(c.vigFim||'?'):'')+'</option>';
+  }
+  sc.innerHTML=h+'<option value="__nova">＋ cadastrar convenção…</option>';
+  sc.value=atual; PRE_CCT=sc.value==='__nova'?PRE_CCT:sc.value;
+}
+function ligarPreConfig(){
+  popularPreCct();
+  var sc=$('#preCct');
+  if(sc) sc.onchange=function(){
+    if(sc.value==='__nova'){ sc.value=PRE_CCT||''; abrirConvencoes(); return; }
+    PRE_CCT=sc.value||'';
+  };
+  var cr=$('#preCrit');
+  if(cr){
+    cr.value=CFG.criterioSaldo||'ambos';
+    cr.onchange=function(){
+      CFG.criterioSaldo=cr.value||'ambos'; salvarCfg();
+      if(ATUAL&&!$('#telaResultado').hidden) renderTudo(ATUAL);   /* já reflete se houver resultado aberto */
+    };
+  }
 }
 
 /* Alguns motores não revalidam a propriedade `color` já computada quando as custom
@@ -4272,7 +4329,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-08-04a';
+var BUILD='2026-08-04b';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
@@ -4308,6 +4365,7 @@ function ligarUI(){
   $('#bLimpar').onclick=function(){$('#txt').value='';$('#msg1').innerHTML='';$('#txt').focus();};
   $('#bColar').onclick=function(){mostrarTexto();$('#txt').focus();};
   $('#bAbrir').onclick=function(){$('#fArquivo').click();};
+  ligarPreConfig();
   $('#fArquivo').onchange=function(){ if(this.files&&this.files.length) abrirArquivos(this.files); this.value=''; };
 
   $$('#filtros button').forEach(function(b){
