@@ -1392,6 +1392,16 @@ function parseAnalitico(txt){
     }
   }
 
+  /* ADIANTAMENTO numa rescisão é sempre recuperação de valor adiantado = DESCONTO.
+     Alguns sistemas imprimem o "Adiantamento 13 salário" sob a seção "13º Salário"
+     (grupo de provento), o que o marcaria como provento e (a) somaria a referência
+     — que é um VALOR, não avos — na contagem de avos do 13º (o famoso "1431") e
+     (b) desbalancearia os totais de proventos/descontos. Força desconto. */
+  for(var iAd=0;iAd<d.rubricas.length;iAd++){
+    if(d.rubricas[iAd].tipo==='P' && /ADIANT/.test(d.rubricas[iAd].nome.toUpperCase()))
+      d.rubricas[iAd].tipo='D';
+  }
+
   var t=/Totais:\s*([\d.,]+)\s+([\d.,]+)/.exec(todo);
   if(t){ d.totalP=nb(t[1]); d.totalD=nb(t[2]); }
   var lq=/L[ií]quido rescis[aã]o:\s*([\d.,]+)/.exec(todo);
@@ -1874,12 +1884,24 @@ function auditar(d){
   if(d.admissao&&d.demissao){
     var a13esp=avos13(d.admissao,fimContagem);
     var a13dec=Math.round(somaRef(semMedia(C.d13))+somaRef(semMedia(C.d13Aviso)));
+    /* Regra dos 15 dias (Lei 4.090/62): faltas injustificadas que deixem o mês
+       da rescisão com menos de 15 dias trabalhados fazem esse mês NÃO gerar avo.
+       O analítico não separa faltas por mês; estima-se pelo saldo e pelo desconto
+       de faltas em dias DO mês da rescisão (assunção padrão em rescisão). */
+    var faltasMesResc=0;
+    for(var iFa=0;iFa<C.faltas.length;iFa++){ var nfa=C.faltas[iFa].nome.toUpperCase();
+      if(/DIAS/.test(nfa)&&!/DSR|REPOUSO/.test(nfa)) faltasMesResc+=C.faltas[iFa].refN; }
+    var diasSaldoResc=C.saldo.length?Math.round(C.saldo[0].refN):0;
+    var trabResc=diasSaldoResc-faltasMesResc;
+    var perdaAvo=(diasSaldoResc>0&&faltasMesResc>0&&trabResc<15)?1:0;
+    var a13espAj=Math.max(0,a13esp-perdaAvo);
     if(reg.d13){
-      cmp('erro',G,'Avos de 13º proporcional',a13dec,a13esp,
+      var notaFalta=perdaAvo?' Como houve '+Math.round(faltasMesResc)+' faltas no mês da rescisão, sobraram '+trabResc+' dias trabalhados (<15): esse mês não gera avo, então o esperado cai para '+a13espAj+'.':'';
+      cmp('erro',G,'Avos de 13º proporcional',a13dec,a13espAj,
         'Período '+fd(new Date(Date.UTC(fimContagem.getUTCFullYear(),0,1))>d.admissao?new Date(Date.UTC(fimContagem.getUTCFullYear(),0,1)):d.admissao)+' a '+fd(fimContagem)+
         (d.tipoAviso==='indenizado'&&reg.projeta?' (inclui a projeção do aviso)':'')+
-        ' → '+a13esp+' avos. Lançados '+a13dec+'.',
-        'Lei 4.090/62 (mês de 15 dias ou mais) + Súmula 305 TST (a projeção do aviso indenizado gera avos).',
+        ' → '+a13esp+(perdaAvo?' meses':' avos')+'. Lançados '+a13dec+'.'+notaFalta,
+        'Lei 4.090/62 (mês de 15 dias ou mais; faltas injustificadas reduzem avo) + Súmula 305 TST (a projeção do aviso indenizado gera avos).',
         'Cada avo vale '+mo(sal/12)+'.',0.5);
       un('avos'); rr(cods(semMedia(C.d13),semMedia(C.d13Aviso)));
     }
@@ -1978,8 +2000,15 @@ function auditar(d){
   }
   var bfp=semMedia(C.feriasProp);
   if(bfp.length&&sal>0){
-    var avf=somaRef(bfp);
-    cmp('erro',G,'Base das férias proporcionais',soma(bfp),r2(sal/12*avf),mo(sal)+' / 12 × '+avf+' avos.','Art. 146, § único CLT','');
+    var avf=somaRef(bfp), vfp=soma(bfp);
+    /* a referência das férias proporcionais aparece em DUAS convenções de folha:
+       como AVOS (valor = salário/12 × avos) ou já convertida em DIAS de gozo
+       (valor = salário/30 × dias) — típico quando as faltas reduzem as férias
+       pela tabela do art. 130. O valor lançado desambigua; aceitar as duas. */
+    var espAv=r2(sal/12*avf), espDi=r2(sal/30*avf);
+    if(ok2(vfp,espAv)) add('ok',G,'Base das férias proporcionais','Confere: '+mo(sal)+' / 12 × '+avf+' avos.',vfp,espAv);
+    else if(ok2(vfp,espDi)) add('ok',G,'Base das férias proporcionais','Confere valorada por dia: '+mo(sal)+' / 30 × '+avf+' dias — a folha reduziu as férias por faltas (art. 130) e converteu em dias de gozo.',vfp,espDi,'Art. 130 + art. 146, § único CLT');
+    else cmp('erro',G,'Base das férias proporcionais',vfp,espAv,mo(sal)+' / 12 × '+avf+' avos ('+mo(espAv)+') ou, se '+avf+' for dias, '+mo(sal)+' / 30 × '+avf+' = '+mo(espDi)+'.','Art. 146, § único CLT','');
     rr(cods(bfp));
   }
   var bfv=semMedia(C.feriasVenc);
@@ -4329,7 +4358,7 @@ function aplicarTema(t,inicial){
 
 /* carimbo de versão: muda a cada deploy relevante. Serve para saber num
    olhar se a página aberta é a atual ou uma cópia velha em cache. */
-var BUILD='2026-08-04b';
+var BUILD='2026-08-04c';
 function ligarUI(){
   var b=$('#build'); if(b) b.textContent='v. '+BUILD;
   $('#btPrint').innerHTML=ico('print');
@@ -4760,6 +4789,46 @@ function autoteste(){
   CFG.criterioSaldo='diasMes'; var Ff3=auditar(dEXF).findings;
   T('F critério dias-do-mês: falta /31 confere',achaSev(Ff3,/^Desconto de faltas/,'ok')!=null);
   CFG.criterioSaldo=cSa;
+
+  /* analítico REAL anonimizado: mês de 31 dias com /31, ADIANTAMENTO de 13º
+     impresso sob a seção "13º Salário", e 15 faltas que derrubam o avo de julho
+     (folha correta com 6 avos). Números reais, identificadores fictícios. */
+  var EXJ=['Empresa: EXEMPLO OFICINA MECANICA LTDA','CNPJ: 33.333.333/0001-33',
+   'RELATÓRIO ANALÍTICO DO CÁLCULO DE RESCISÃO',
+   'Empregado: 99 - CICLANO DE TAL CTPS: 9999999 / 0009 - SP',
+   'Cargo: MECANICO PIS: 111.11111.11-1 Data nascto: 24/08/1990 Salário: 2.850,00',
+   'Data admissão: 10/12/2025 Data opção: 10/12/2025 Data aviso: 29/06/2026 Data demissão: 29/07/2026',
+   'Motivo demissão: Demitido SEM justa causa Data pagamento: 06/08/2026',
+   'Salários','9180 SALDO DE SALARIO DIAS 29,00 2.666,13',
+   '13º Salário','8550 13 SALARIO INTEGRAL RESCISAO 6,00 1.425,00',
+   'Férias Rescisão','29 FERIAS PROPORCIONAIS 8,00 760,00','8169 1/3 FERIAS PROPORCIONAIS RESCISAO 33,33 253,33',
+   '13º Salário','8566 ADIANTAMENTO 13 SALARIO RESCISAO 1.425,00 1.425,00',
+   'Descontos','8794 DIAS FALTAS DSR 4,00 367,74',
+   'INSS','826 INSS SOBRE RESCISAO 7,50 68,95','989 INSS 13 SAL.RESCISAO 7,50 106,87',
+   'Desconto Adiantamento','981 DESC.ADIANT.SALARIAL 1.140,00 1.140,00',
+   'Falta Integral','8792 DIAS FALTAS 15,00 1.379,03',
+   'Totais: 5.104,46 4.487,59','Líquido rescisão: 616,87',
+   'Saldo FGTS: 1.500,99 Saldo de Salário: 2.666,13',
+   'Base FGTS Mensal: 919,36','FGTS Mensal: 73,54','FGTS 40%: 629,81',
+   'Base INSS Mensal: 919,36','Base INSS 13º Salário: 1.425,00',
+   'Base IRRF Mensal: 220,64','Abat. IRRF Mensal: 68,95',
+   'Base IRRF 13º Salário: 1.425,00','Abat. IRRF 13º Salário: 106,87',
+   'Aviso Indenizado: NÃO'].join('\n');
+  var dJ=parseAnalitico(EXJ);
+  T('J adiantamento de 13º vira desconto',(function(){var r=dJ.rubricas.filter(function(x){return /ADIANTAMENTO 13/.test(x.nome);})[0];return r&&r.tipo==='D';})());
+  var sJp=0,sJd=0; for(i=0;i<dJ.rubricas.length;i++){ if(dJ.rubricas[i].tipo==='P')sJp+=dJ.rubricas[i].valor; else sJd+=dJ.rubricas[i].valor; }
+  T('J soma dos proventos = 5.104,46',ok2(sJp,5104.46,0.05),r2(sJp));
+  T('J soma dos descontos = 4.487,59',ok2(sJd,4487.59,0.05),r2(sJd));
+  var cJ=CFG.criterioSaldo; CFG.criterioSaldo='diasMes'; var FJ=auditar(dJ).findings;
+  var fAvos=acha(FJ,/Avos de 13/);
+  T('J avos de 13º = 6 confere pela regra dos 15 dias',fAvos&&fAvos.sev==='ok',(fAvos||{}).dec+' vs '+(fAvos||{}).esp+' ['+(fAvos||{}).sev+']');
+  T('J base do 13º confere',achaSev(FJ,/Base do 13/,'ok')!=null);
+  T('J base das férias por dia confere (art. 130)',achaSev(FJ,/Base das f[eé]rias proporcionais/,'ok')!=null,(acha(FJ,/Base das f[eé]rias proporcionais/)||{}).dec+' vs '+(acha(FJ,/Base das f[eé]rias proporcionais/)||{}).esp);
+  T('J saldo /31 confere no critério dias-do-mês',achaSev(FJ,/^Saldo de sal/,'ok')!=null);
+  T('J nenhum erro sob dias-do-mês',(function(){var e=FJ.filter(function(f){return f.sev==='erro';});return e.length===0;})(),FJ.filter(function(f){return f.sev==='erro';}).map(function(f){return f.titulo;}).join(' | '));
+  T('J total de proventos confere',achaSev(FJ,/Total de proventos/,'ok')!=null);
+  T('J total de descontos confere',achaSev(FJ,/Total de descontos/,'ok')!=null);
+  CFG.criterioSaldo=cJ;
 
   /* --- contagem e veredito --- */
   var cg1=contagem(F1), cg2=contagem(F2);
